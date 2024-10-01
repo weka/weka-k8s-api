@@ -180,6 +180,12 @@ spec:
                 type: integer
               serviceAccountName:
                 type: string
+              state:
+                default: active
+                enum:
+                - active
+                - paused
+                type: string
               tolerations:
                 items:
                   description: |-
