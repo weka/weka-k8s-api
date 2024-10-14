@@ -12,6 +12,7 @@ type WekaPolicySpec struct {
 	Image           string          `json:"image"`
 	ImagePullSecret string          `json:"imagePullSecret"`
 	Tolerations     []v1.Toleration `json:"tolerations,omitempty"`
+	Affinity        *v1.Affinity    `json:"affinity,omitempty"`
 }
 
 // WekaPolicyStatus defines the observed state of WekaPolicy

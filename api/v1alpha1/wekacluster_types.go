@@ -98,6 +98,44 @@ func (s RoleNodeSelector) ForRole(role string) map[string]string {
 	}
 }
 
+type RoleTopologySpreadConstraints struct {
+	Compute []v1.TopologySpreadConstraint `json:"compute,omitempty"`
+	Drive   []v1.TopologySpreadConstraint `json:"drive,omitempty"`
+	S3      []v1.TopologySpreadConstraint `json:"s3,omitempty"`
+}
+
+func (c *RoleTopologySpreadConstraints) ForRole(role string) []v1.TopologySpreadConstraint {
+	switch role {
+	case "compute":
+		return c.Compute
+	case "drive":
+		return c.Drive
+	case "s3":
+		return c.S3
+	default:
+		return nil
+	}
+}
+
+type RoleAffinity struct {
+	Compute *v1.Affinity `json:"compute,omitempty"`
+	Drive   *v1.Affinity `json:"drive,omitempty"`
+	S3      *v1.Affinity `json:"s3,omitempty"`
+}
+
+func (a *RoleAffinity) ForRole(role string) *v1.Affinity {
+	switch role {
+	case "compute":
+		return a.Compute
+	case "drive":
+		return a.Drive
+	case "s3":
+		return a.S3
+	default:
+		return nil
+	}
+}
+
 // WekaClusterSpec defines the desired state of WekaCluster
 type WekaClusterSpec struct {
 	Template           string            `json:"template"`
@@ -106,6 +144,15 @@ type WekaClusterSpec struct {
 	DriversDistService string            `json:"driversDistService,omitempty"`
 	NodeSelector       map[string]string `json:"nodeSelector,omitempty"`
 	RoleNodeSelector   RoleNodeSelector  `json:"roleNodeSelector,omitempty"`
+	// controls the distribution of weka containers across the failure domainsqq
+	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	// takes precedence over the `topologySpreadConstraints`
+	RoleTopologySpreadConstraints *RoleTopologySpreadConstraints `json:"roleTopologySpreadConstraints,omitempty"`
+	// advanced scheduling constraints
+	Affinity *v1.Affinity `json:"affinity,omitempty"`
+	// affinity per container role
+	// takes precedence over the `affinity` field
+	RoleAffinity *RoleAffinity `json:"roleAffinity,omitempty"`
 	//+kubebuilder:validation:Enum=auto;shared;dedicated;dedicated_ht;manual
 	//+kubebuilder:default=auto
 	CpuPolicy           CpuPolicy            `json:"cpuPolicy,omitempty"`
@@ -242,6 +289,8 @@ func (w *WekaCluster) ToOwnerObject() *WekaContainerDetails {
 		Image:           w.Spec.Image,
 		ImagePullSecret: w.Spec.ImagePullSecret,
 		Tolerations:     util.ExpandTolerations([]v1.Toleration{}, w.Spec.Tolerations, w.Spec.RawTolerations),
+		Labels:          w.ObjectMeta.GetLabels(),
+		Affinity:        w.Spec.Affinity,
 	}
 }
 

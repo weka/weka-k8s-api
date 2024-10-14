@@ -73,14 +73,18 @@ type WekaClientSpec struct {
 	// if not set (0), weka will find a free port from the portRange
 	AgentPort int `json:"agentPort,omitempty"`
 	// used for dynamic port allocation
-	PortRange          *PortRange        `json:"portRange,omitempty"`
-	NodeSelector       map[string]string `json:"nodeSelector,omitempty"`
-	WekaSecretRef      string            `json:"wekaSecretRef,omitempty"`
-	NetworkSelector    NetworkSelector   `json:"network,omitempty"`
-	DriversDistService string            `json:"driversDistService,omitempty"`
-	DriversLoaderImage string            `json:"driversLoaderImage,omitempty"`
-	JoinIps            []string          `json:"joinIpPorts,omitempty"`
-	TargetCluster      ObjectReference   `json:"targetCluster,omitempty"`
+	PortRange    *PortRange        `json:"portRange,omitempty"`
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// controls the distribution of weka containers across the failure domains
+	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	// advanced scheduling constraints
+	Affinity           *v1.Affinity    `json:"affinity,omitempty"`
+	WekaSecretRef      string          `json:"wekaSecretRef,omitempty"`
+	NetworkSelector    NetworkSelector `json:"network,omitempty"`
+	DriversDistService string          `json:"driversDistService,omitempty"`
+	DriversLoaderImage string          `json:"driversLoaderImage,omitempty"`
+	JoinIps            []string        `json:"joinIpPorts,omitempty"`
+	TargetCluster      ObjectReference `json:"targetCluster,omitempty"`
 	// +kubebuilder:validation:Enum=auto;shared;dedicated;dedicated_ht;manual
 	//+kubebuilder:default=auto
 	CpuPolicy           CpuPolicy            `json:"cpuPolicy,omitempty"`
