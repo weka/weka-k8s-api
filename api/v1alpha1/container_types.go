@@ -131,8 +131,6 @@ type ContainerAllocations struct {
 	LbPort    int      `json:"lbPort,omitempty"`
 	WekaPort  int      `json:"wekaPort,omitempty"`
 	AgentPort int      `json:"agentPort,omitempty"`
-	// value of the failure domain label of the node where the container is running
-	FailureDomain *string `json:"failureDomain,omitempty"`
 }
 
 type WekaContainerStatus struct {
@@ -325,11 +323,12 @@ func (w *WekaContainer) GetNodeAffinity() NodeName {
 
 func (w *WekaContainer) ToContainerDetails() *WekaContainerDetails {
 	return &WekaContainerDetails{
-		Image:           w.Spec.Image,
-		ImagePullSecret: w.Spec.ImagePullSecret,
-		Tolerations:     w.Spec.Tolerations,
-		Labels:          w.ObjectMeta.GetLabels(),
-		Affinity:        w.Spec.Affinity,
+		Image:              w.Spec.Image,
+		ImagePullSecret:    w.Spec.ImagePullSecret,
+		Tolerations:        w.Spec.Tolerations,
+		Labels:             w.ObjectMeta.GetLabels(),
+		Affinity:           w.Spec.Affinity,
+		FailureDomainLabel: w.Spec.FailureDomainLabel,
 	}
 }
 
@@ -385,9 +384,10 @@ func (c *WekaContainer) IsPaused() bool {
 }
 
 type WekaContainerDetails struct {
-	Image           string            `json:"image"`
-	ImagePullSecret string            `json:"imagePullSecrets"`
-	Tolerations     []v1.Toleration   `json:"tolerations,omitempty"`
-	Labels          map[string]string `json:"labels,omitempty"`
-	Affinity        *v1.Affinity      `json:"affinity,omitempty"`
+	Image              string            `json:"image"`
+	ImagePullSecret    string            `json:"imagePullSecrets"`
+	Tolerations        []v1.Toleration   `json:"tolerations,omitempty"`
+	Labels             map[string]string `json:"labels,omitempty"`
+	Affinity           *v1.Affinity      `json:"affinity,omitempty"`
+	FailureDomainLabel *string           `json:"failureDomainLabel,omitempty"`
 }

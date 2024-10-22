@@ -298,10 +298,11 @@ func (status *WekaClusterStatus) InitStatus() {
 
 func (w *WekaCluster) ToOwnerObject() *WekaContainerDetails {
 	return &WekaContainerDetails{
-		Image:           w.Spec.Image,
-		ImagePullSecret: w.Spec.ImagePullSecret,
-		Tolerations:     util.ExpandTolerations([]v1.Toleration{}, w.Spec.Tolerations, w.Spec.RawTolerations),
-		Labels:          w.ObjectMeta.GetLabels(),
+		Image:              w.Spec.Image,
+		ImagePullSecret:    w.Spec.ImagePullSecret,
+		Tolerations:        util.ExpandTolerations([]v1.Toleration{}, w.Spec.Tolerations, w.Spec.RawTolerations),
+		Labels:             w.ObjectMeta.GetLabels(),
+		FailureDomainLabel: w.Spec.FailureDomainLabel,
 	}
 }
 
