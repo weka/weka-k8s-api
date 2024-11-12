@@ -20,9 +20,11 @@ type NodeName types.NodeName
 // +kubebuilder:printcolumn:name="Management IP",type="string",JSONPath=".status.managementIP",description="Node where the container is running",priority=2
 // +kubebuilder:printcolumn:name="Drives",type="integer",JSONPath=".spec.numDrives",description="Number of drives attached to container",priority=3
 // +kubebuilder:printcolumn:name="Cores",type="integer",JSONPath=".spec.numCores",description="Number of dedicated cores",priority=4
-// +kubebuilder:printcolumn:name="InternalName",type="string",JSONPath=".spec.name",description="Weka container name",priority=5
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time since creation",priority=6
-// +kubebuilder:printcolumn:name="Weka cID",type="string",JSONPath=".status.containerID",description="Weka container ID",priority=0
+// +kubebuilder:printcolumn:name="Weka cID",type="string",JSONPath=".status.containerID",description="Weka container ID",priority=5
+// +kubebuilder:printcolumn:name="Node",type="string",JSONPath=".status.nodeAffinity",description="Node name",priority=6
+// +kubebuilder:printcolumn:name="Weka Cluster GUID",type="string",JSONPath=".status.clusterID",description="Weka cluster GUID",priority=7
+// +kubebuilder:printcolumn:name="Internal Name",type="string",JSONPath=".spec.name",description="Weka container name",priority=8
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time since creation",priority=9
 type WekaContainer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
