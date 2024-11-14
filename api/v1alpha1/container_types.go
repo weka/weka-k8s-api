@@ -43,6 +43,7 @@ const (
 	WekaContainerModeEnvoy          = "envoy"
 	WekaContainerModeAdhocOpWC      = "adhoc-op-with-container"
 	WekaContainerModeAdhocOp        = "adhoc-op"
+	WekaContainerModeEnsureNICs     = "ensure-nics"
 	PersistencePathBase             = "/opt/k8s-weka"
 	PersistencePathBaseCos          = "/mnt/stateful_partition/k8s-weka"
 	PersistencePathBaseRhCos        = "/root/k8s-weka"
