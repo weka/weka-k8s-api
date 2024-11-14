@@ -47,7 +47,7 @@ type AdditionalMemory struct {
 	NfsGateway int `json:"nfsGateway,omitempty"`
 }
 
-func (a *AdditionalMemory) GetForMode(mode string) int {
+func (a *AdditionalMemory) GetForMode(mode WekaContainerMode) int {
 	additionalMemory := 0
 	switch mode {
 	case WekaContainerModeDrive:
@@ -104,15 +104,15 @@ type RoleNodeSelector struct {
 	NfsGateway map[string]string `json:"nfsGateway,omitempty"`
 }
 
-func (s RoleNodeSelector) ForRole(role string) map[string]string {
+func (s RoleNodeSelector) ForRole(role WekaContainerMode) map[string]string {
 	switch role {
-	case "compute":
+	case WekaContainerModeCompute:
 		return s.Compute
-	case "drive":
+	case WekaContainerModeDrive:
 		return s.Drive
-	case "s3":
+	case WekaContainerModeS3:
 		return s.S3
-	case "nfs-gateway":
+	case WekaContainerModeNfsGateway:
 		return s.NfsGateway
 	default:
 		return nil
@@ -126,15 +126,15 @@ type RoleTopologySpreadConstraints struct {
 	NfsGateway []v1.TopologySpreadConstraint `json:"nfsGateway,omitempty"`
 }
 
-func (c *RoleTopologySpreadConstraints) ForRole(role string) []v1.TopologySpreadConstraint {
+func (c *RoleTopologySpreadConstraints) ForRole(role WekaContainerMode) []v1.TopologySpreadConstraint {
 	switch role {
-	case "compute":
+	case WekaContainerModeCompute:
 		return c.Compute
-	case "drive":
+	case WekaContainerModeDrive:
 		return c.Drive
-	case "s3":
+	case WekaContainerModeS3:
 		return c.S3
-	case "nfs-gateway":
+	case WekaContainerModeNfsGateway:
 		return c.NfsGateway
 	default:
 		return nil
@@ -148,15 +148,15 @@ type RoleAffinity struct {
 	NfsGateway *v1.Affinity `json:"nfsGateway,omitempty"`
 }
 
-func (a *RoleAffinity) ForRole(role string) *v1.Affinity {
+func (a *RoleAffinity) ForRole(role WekaContainerMode) *v1.Affinity {
 	switch role {
-	case "compute":
+	case WekaContainerModeCompute:
 		return a.Compute
-	case "drive":
+	case WekaContainerModeDrive:
 		return a.Drive
-	case "s3":
+	case WekaContainerModeS3:
 		return a.S3
-	case "nfs-gateway":
+	case WekaContainerModeNfsGateway:
 		return a.NfsGateway
 	default:
 		return nil
@@ -220,7 +220,7 @@ type WekaClusterSpec struct {
 	GracefulDestroyDuration metav1.Duration `json:"gracefulDestroyDuration,omitempty"`
 }
 
-func (c *WekaClusterSpec) GetAdditionalMemory(mode string) int {
+func (c *WekaClusterSpec) GetAdditionalMemory(mode WekaContainerMode) int {
 	return c.AdditionalMemory.GetForMode(mode)
 }
 
