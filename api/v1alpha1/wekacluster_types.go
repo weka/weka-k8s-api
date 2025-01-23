@@ -42,6 +42,9 @@ type NetworkSelector struct {
 	EthDevices []string `json:"ethDevices,omitempty"`
 	Gateway    string   `json:"gateway,omitempty"`
 	UdpMode    bool     `json:"udpMode,omitempty"`
+	// subnet that is used for devices auto-discovery
+	// +kubebuilder:validation:Pattern="^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}$"
+	DevicesSubnet string `json:"devicesSubnet,omitempty"`
 }
 
 type AdditionalMemory struct {

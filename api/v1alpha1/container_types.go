@@ -154,6 +154,9 @@ type Network struct {
 	UdpMode    bool       `json:"udpMode,omitempty"`
 	AWS        AWSNetwork `json:"aws,omitempty"`
 	Gateway    string     `json:"gateway,omitempty"`
+	// subnet that is used for devices auto-discovery
+	// +kubebuilder:validation:Pattern="^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}$"
+	DevicesSubnet string `json:"devicesSubnet,omitempty"`
 }
 
 type ContainerAllocations struct {

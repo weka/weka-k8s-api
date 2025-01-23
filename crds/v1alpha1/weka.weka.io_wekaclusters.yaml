@@ -196,6 +196,10 @@ spec:
               network:
                 description: weka cluster network configuration
                 properties:
+                  devicesSubnet:
+                    description: subnet that is used for devices auto-discovery
+                    pattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2}$
+                    type: string
                   ethDevice:
                     type: string
                   ethDevices:
