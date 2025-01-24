@@ -1059,6 +1059,9 @@ spec:
                 type: string
               instructions:
                 properties:
+                  adhocOpImage:
+                    description: image to use for the container that runs instruction
+                    type: string
                   payload:
                     type: string
                   type:

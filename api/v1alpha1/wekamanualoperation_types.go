@@ -48,6 +48,7 @@ type WekaManualOperationList struct {
 }
 
 type ManualOperatorPayload struct {
+	AdHocOpImage              *string                    `json:"adHocOpImage,omitempty"`
 	SignDrives                *SignDrivesPayload         `json:"signDrivesPayload,omitempty"`
 	BlockDrives               *BlockDrivesPayload        `json:"blockDrivesPayload,omitempty"`
 	DiscoverDrives            *DiscoverDrivesPayload     `json:"discoverDrivesPayload,omitempty"`

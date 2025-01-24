@@ -87,6 +87,8 @@ type WekaContainerSpecOverrides struct {
 type Instructions struct {
 	Type    string `json:"type"`
 	Payload string `json:"payload,omitempty"`
+	// image to use for the container that runs instruction
+	AdHocOpImage *string `json:"adhocOpImage,omitempty"`
 }
 
 type WekaContainerSpec struct {

@@ -73,6 +73,8 @@ spec:
                 type: string
               payload:
                 properties:
+                  adHocOpImage:
+                    type: string
                   blockDrivesPayload:
                     properties:
                       node:

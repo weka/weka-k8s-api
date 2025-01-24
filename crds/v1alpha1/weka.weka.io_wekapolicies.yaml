@@ -69,6 +69,8 @@ spec:
                 type: string
               payload:
                 properties:
+                  adHocOpImage:
+                    type: string
                   discoverDrivesPayload:
                     properties:
                       nodeSelector:

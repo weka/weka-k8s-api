@@ -47,6 +47,7 @@ type WekaPolicyList struct {
 }
 
 type PolicyPayload struct {
+	AdHocOpImage     *string                  `json:"adHocOpImage,omitempty"`
 	SignDrives       *SignDrivesPayload       `json:"signDrivesPayload,omitempty"`
 	SchedulingConfig *SchedulingConfigPayload `json:"schedulingConfigPayload,omitempty"`
 	DiscoverDrives   *DiscoverDrivesPayload   `json:"discoverDrivesPayload,omitempty"`
