@@ -213,6 +213,8 @@ type WekaContainerStatus struct {
 	Stats              *WekaContainerMetrics    `json:"stats,omitempty"`
 	PrinterColumns     *ContainerPrinterColumns `json:"printer,omitempty"`
 	Timestamps         map[string]metav1.Time   `json:"timestamps,omitempty"`
+	// if set to true, the container is part of initial weka cluster creation
+	ReadyForClusterCreation *bool `json:"readyForClusterCreation,omitempty"`
 }
 
 func (s *WekaContainerStatus) GetManagementIps() []string {
@@ -223,6 +225,10 @@ func (s *WekaContainerStatus) GetManagementIps() []string {
 		return []string{s.ManagementIP}
 	}
 	return nil
+}
+
+func (s *WekaContainerStatus) IsReadyForClusterCreation() bool {
+	return s.ReadyForClusterCreation != nil && *s.ReadyForClusterCreation
 }
 
 // TraceConfiguration defines the configuration for the traces, accepts parameters in gigabytes

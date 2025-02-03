@@ -1649,6 +1649,10 @@ spec:
                   processes:
                     type: string
                 type: object
+              readyForClusterCreation:
+                description: if set to true, the container is part of initial weka
+                  cluster creation
+                type: boolean
               result:
                 type: string
               stats:

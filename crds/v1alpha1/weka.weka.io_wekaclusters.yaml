@@ -183,6 +183,20 @@ spec:
                       (only applicable if `label` is set)
                     type: integer
                 type: object
+              formClusterConditions:
+                description: conditions that must be met before creating the initial
+                  weka cluster
+                properties:
+                  minNumComputeContainers:
+                    description: minimum number of compute containers that should
+                      be up before forming the cluster
+                    type: integer
+                  minNumDriveContainers:
+                    description: minimum number of drive containers that should be
+                      up before forming the cluster
+                    minimum: 5
+                    type: integer
+                type: object
               gracefulDestroyDuration:
                 default: 24h
                 description: |-

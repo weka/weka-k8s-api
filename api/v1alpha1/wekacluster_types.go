@@ -191,6 +191,14 @@ type StartIoConditions struct {
 	MinNumDrives int `json:"minNumDrives,omitempty"`
 }
 
+type FormClusterConditions struct {
+	// minimum number of compute containers that should be up before forming the cluster
+	MinComputeContainers int `json:"minNumComputeContainers,omitempty"`
+	// minimum number of drive containers that should be up before forming the cluster
+	// +kubebuilder:validation:Minimum=5
+	MinDriveContainers int `json:"minNumDriveContainers,omitempty"`
+}
+
 type FailureDomain struct {
 	// label used for spreading the weka containers across different failure domains (if set)
 	// nodes that have the same value for the label will be considered as a single failure domain
@@ -264,6 +272,8 @@ type WekaClusterSpec struct {
 	BucketRaftSize *int `json:"bucketRaftSize,omitempty"`
 	// conditions that must be met before starting IO
 	StartIoConditions *StartIoConditions `json:"startIoConditions,omitempty"`
+	// conditions that must be met before creating the initial weka cluster
+	FormClusterConditions *FormClusterConditions `json:"formClusterConditions,omitempty"`
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^(0|([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$"
 	// +kubebuilder:default="24h"
@@ -289,6 +299,14 @@ func (c *WekaClusterSpec) GetStartIoConditions() *StartIoConditions {
 		return &StartIoConditions{}
 	} else {
 		return c.StartIoConditions
+	}
+}
+
+func (c *WekaClusterSpec) GetFormClusterConditions() *FormClusterConditions {
+	if c.FormClusterConditions == nil {
+		return &FormClusterConditions{}
+	} else {
+		return c.FormClusterConditions
 	}
 }
 
