@@ -134,6 +134,8 @@ type WekaClientSpec struct {
 	// +kubebuilder:default="24h"
 	// sets weka cluster-side timeout, if client is not coming back in specified duration it will be auto removed from cluster config
 	AutoRemoveTimeout metav1.Duration `json:"autoRemoveTimeout,omitempty"`
+
+	CSIGroup string `json:"csiGroup,omitempty"`
 }
 
 // WekaClientStatus defines the observed state of WekaClient
