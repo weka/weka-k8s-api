@@ -145,6 +145,8 @@ const (
 	Completed            ContainerStatus = "Completed"
 	Building             ContainerStatus = "Building"
 	TimestampStopAttempt ContainerStatus = "StoppingAttempt"
+	NodeNotReady         ContainerStatus = "NodeNotReady"
+	NodeUnschedulable    ContainerStatus = "NodeUnschedulable"
 )
 
 type WekaContainerSpecOverrides struct {
@@ -540,7 +542,7 @@ func (w *WekaContainer) IsOneOff() bool {
 }
 
 func (w *WekaContainer) IsClientContainer() bool {
-	return slices.Contains([]string{WekaContainerModeClient}, w.Spec.Mode)
+	return w.Spec.Mode == WekaContainerModeClient
 }
 
 func (w *WekaContainer) IsProtocolContainer() bool {
