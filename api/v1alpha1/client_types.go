@@ -18,11 +18,21 @@ package v1alpha1
 
 import (
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+type WekaClientStatusEnum string
+
+const (
+	WekaClientStatusInit       WekaClientStatusEnum = "Init"
+	WekaClientStatusRunning    WekaClientStatusEnum = "Running"
+	WekaClientStatusUpgrading  WekaClientStatusEnum = "Upgrading"
+	WekaClientStatusDestroying WekaClientStatusEnum = "Destroying"
+)
 
 type DriverSpec struct{}
 
@@ -42,18 +52,25 @@ type WekahomeClientConfig struct {
 type UpgradePolicyType string
 
 const (
-	UpgradePolicyTypeManual    UpgradePolicyType = "manual"
-	UpgradePolicyTypeRolling   UpgradePolicyType = "rolling"
-	UpgradePolicyTypeAllAtOnce UpgradePolicyType = "all-at-once"
+	UpgradePolicyTypeManual         UpgradePolicyType = "manual"
+	UpgradePolicyTypeRolling        UpgradePolicyType = "rolling"
+	UpgradePolicyTypeAllAtOnce      UpgradePolicyType = "all-at-once"
+	UpgradePolicyTypeAllAtOnceForce UpgradePolicyType = "all-at-once-force"
 )
 
 type WekaClientSpecOverrides struct {
 	// used to override machine identifier node reference for client containers
 	MachineIdentifierNodeRef string `json:"machineIdentifierNodeRef,omitempty"`
+	// unsafe operation, forces drain on the node where the container is running, should not be used unless instructed explicitly by weka personnel, the effect of drain is throwing away all IOs and acknowledging all umounts in unsafe manner
+	ForceDrain bool `json:"forceDrain,omitempty"`
+	// option to skip active mounts check before deleting client containers
+	SkipActiveMountsCheck bool `json:"skipActiveMountsCheck,omitempty"`
+	// unsafe operation, runs nsenter in root namespace to umount all wekafs mounts visible on host
+	UmountOnHost bool `json:"umountOnHost,omitempty"`
 }
 
 type UpgradePolicy struct {
-	// +kubebuilder:validation:Enum=manual;all-at-once;rolling
+	// +kubebuilder:validation:Enum=manual;all-at-once;rolling;all-at-once-force
 	// +kubebuilder:default=all-at-once
 	Type UpgradePolicyType `json:"type,omitempty"`
 }
@@ -68,9 +85,20 @@ type PortRange struct {
 	PortRange int `json:"portRange,omitempty"`
 }
 
+type PodResources struct {
+	Cpu    resource.Quantity `json:"cpu,omitempty"`
+	Memory resource.Quantity `json:"memory,omitempty"`
+}
+
+type PodResourcesSpec struct {
+	Requests PodResources `json:"requests,omitempty"`
+	Limits   PodResources `json:"limits,omitempty"`
+}
+
 // WekaClientSpec defines the desired state of WekaClient
 type WekaClientSpec struct {
-	// Used in new format
+	// full container image in format of quay.io/weka.io/weka-in-container:VERSION
+	// +kubebuilder:validation:Pattern=`^.+:\d+\.\d+\.\d+.*$`
 	Image           string `json:"image"`
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
 	// if not set (0), weka will find a free port from the portRange
@@ -89,28 +117,44 @@ type WekaClientSpec struct {
 	// +kubebuilder:validation:Enum=auto;shared;dedicated;dedicated_ht;manual
 	//+kubebuilder:default=auto
 	CpuPolicy           CpuPolicy            `json:"cpuPolicy,omitempty"`
+	CpuRequest          string               `json:"cpuRequest,omitempty"`
 	CoresNumber         int                  `json:"coresNum,omitempty"`
 	CoreIds             []int                `json:"coreIds,omitempty"`
 	TracesConfiguration *TracesConfiguration `json:"tracesConfiguration,omitempty"`
 	Tolerations         []string             `json:"tolerations,omitempty"`
 	RawTolerations      []v1.Toleration      `json:"rawTolerations,omitempty"`
-	AdditionalMemory    int                  `json:"additionalMemory,omitempty"`
+	// memory to add/decrease from "auto-calculated" memory
+	AdditionalMemory int `json:"additionalMemory,omitempty"`
+	// experimental: pod resources to be proxied as-is to the pod spec
+	Resources *PodResourcesSpec `json:"resources,omitempty"`
+	// hugepages, value in megabytes
+	HugePages int `json:"hugepages,omitempty"`
+	// value in megabytes to offset
+	HugePagesOffset *int `json:"hugepagesOffset,omitempty"`
 	//DEPRECATED, kept for compatibility with old API clients, not taking any action, to be removed on new API version
 	WekaHomeConfig  WekahomeClientConfig     `json:"wekaHomeConfig,omitempty"`
 	WekaHome        *WekahomeClientConfig    `json:"wekaHome,omitempty"`
 	UpgradePolicy   UpgradePolicy            `json:"upgradePolicy,omitempty"`
 	AllowHotUpgrade bool                     `json:"allowHotUpgrade,omitempty"`
 	Overrides       *WekaClientSpecOverrides `json:"overrides,omitempty"`
+
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^(0|([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$"
+	// +kubebuilder:default="24h"
+	// sets weka cluster-side timeout, if client is not coming back in specified duration it will be auto removed from cluster config
+	AutoRemoveTimeout metav1.Duration `json:"autoRemoveTimeout,omitempty"`
 }
 
 // WekaClientStatus defines the observed state of WekaClient
 type WekaClientStatus struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=status
-	Conditions      []metav1.Condition   `json:"conditions,omitempty"`
-	LastAppliedSpec string               `json:"lastAppliedSpec,omitempty"`
-	Status          string               `json:"status,omitempty"` // Status is the status of the resource, may be either PROGRESSING, FAILED, or READY
-	Stats           *ClientMetrics       `json:"stats,omitempty"`
-	PrinterColumns  ClientPrinterColumns `json:"printer,omitempty"`
+	Conditions      []metav1.Condition `json:"conditions,omitempty"`
+	LastAppliedSpec string             `json:"lastAppliedSpec,omitempty"`
+	// +kubebuilder:validation:Enum=Init;Running;Upgrading;Destroying
+	// +kubebuilder:default=Init
+	Status         WekaClientStatusEnum `json:"status,omitempty"`
+	Stats          *ClientMetrics       `json:"stats,omitempty"`
+	PrinterColumns ClientPrinterColumns `json:"printer,omitempty"`
 }
 
 type ClientPrinterColumns struct {

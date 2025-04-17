@@ -19,9 +19,10 @@ package v1alpha1
 import (
 	"time"
 
-	"github.com/weka/weka-k8s-api/util"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/weka/weka-k8s-api/util"
 )
 
 type WekaClusterStatusEnum string
@@ -67,6 +68,8 @@ func (a *AdditionalMemory) GetForMode(mode string) int {
 		additionalMemory = a.S3
 	case WekaContainerModeNfs:
 		additionalMemory = a.Nfs
+	case WekaContainerModeEnvoy:
+		additionalMemory = a.Envoy
 	}
 	return additionalMemory
 }
@@ -207,12 +210,17 @@ type FailureDomain struct {
 	CompositeLabels []string `json:"compositeLabels,omitempty"`
 }
 
+type CsiConfig struct {
+	EndpointsSubnets []string `json:"endpointsSubnets,omitempty"`
+}
+
 // WekaClusterSpec defines the desired state of WekaCluster
 type WekaClusterSpec struct {
 	// A template/strategy of how to build a cluster, right now only "dynamic" supported, explicitly specifying config of a cluster
 	// +kubebuilder:default=dynamic
 	Template string `json:"template,omitempty"`
 	// full container image name in format of quay.io/weka.io/weka-in-container:VERSION
+	// +kubebuilder:validation:Pattern=`^.+:\d+\.\d+\.\d+.*$`
 	Image string `json:"image"`
 	// image pull secret to use for pulling the image
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
@@ -276,6 +284,7 @@ type WekaClusterSpec struct {
 	// https://github.com/kubernetes/apiextensions-apiserver/issues/56
 	GracefulDestroyDuration metav1.Duration           `json:"gracefulDestroyDuration,omitempty"`
 	Overrides               *WekaClusterSpecOverrides `json:"overrides,omitempty"`
+	CsiConfig               CsiConfig                 `json:"csiConfig,omitempty"`
 }
 
 func (c *WekaClusterSpec) GetOverrides() *WekaClusterSpecOverrides {
@@ -306,6 +315,14 @@ type WekaClusterSpecOverrides struct {
 	PostFormClusterScript string `json:"postFormClusterScript,omitempty"`
 	// unsafe operation, skips graceful stop of weka container for a quick replacement to a new image, should not be used unless instructed explicitly by weka personnel
 	UpgradeForceReplace bool `json:"upgradeForceReplace,omitempty"`
+	// unsafe operation, skips graceful stop of drive weka container for a quick replacement to a new image, should not be used unless instructed explicitly by weka personnel
+	UpgradeForceReplaceDrives bool `json:"upgradeForceReplaceDrives,omitempty"`
+	// unsafe operation, should not be used unless instructed explicitly by weka personnel
+	UpgradeAllAtOnce bool `json:"upgradeAllAtOnce,omitempty"`
+	// Pause upgrade
+	UpgradePaused bool `json:"upgradePaused,omitempty"`
+	// Prevent from moving into compute phase
+	UpgradePausePreCompute bool `json:"upgradePausePreCompute,omitempty"`
 }
 
 func (c *WekaClusterSpec) GetAdditionalMemory(mode string) int {

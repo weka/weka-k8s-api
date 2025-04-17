@@ -2,13 +2,15 @@ package v1alpha1
 
 import (
 	"fmt"
+	"net"
 	"slices"
 
-	"github.com/weka/weka-k8s-api/api/v1alpha1/condition"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/weka/weka-k8s-api/api/v1alpha1/condition"
 )
 
 type NodeName types.NodeName
@@ -19,14 +21,13 @@ type NodeName types.NodeName
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status",description="Weka container status",priority=0
 // +kubebuilder:printcolumn:name="Mode",type="string",JSONPath=".spec.mode",description="Weka container mode",priority=0
 // +kubebuilder:printcolumn:name="Management IPs",type="string",JSONPath=".status.printer.managementIPs",description="Management IPs",priority=0
-// +kubebuilder:printcolumn:name="Node",type="string",JSONPath=".status.nodeAffinity",description="Node affinity of container",priority=0
+// +kubebuilder:printcolumn:name="Node",type="string",JSONPath=".status.printer.nodeAffinity",description="Node affinity of container",priority=0
 // +kubebuilder:printcolumn:name="Processes",type="string",JSONPath=".status.printer.processes",description="Number of processes per state",priority=1
 // +kubebuilder:printcolumn:name="Drives",type="string",JSONPath=".status.printer.drives",description="Number of drives per state",priority=1
 // +kubebuilder:printcolumn:name="Mounts",type="string",JSONPath=".status.printer.activeMounts",description="Number of active mounts",priority=1
 // +kubebuilder:printcolumn:name="CPU",type="string",JSONPath=".status.stats.cpuUtilization",description="CPU Utilization",priority=1
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time since creation",priority=0
 // +kubebuilder:printcolumn:name="Weka cID",type="string",JSONPath=".status.containerID",description="Weka container ID",priority=1
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Weka container message",priority=1
 type WekaContainer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -35,11 +36,39 @@ type WekaContainer struct {
 	Status WekaContainerStatus `json:"status,omitempty"`
 }
 
-func (c *WekaContainer) GetHostIps() []string {
+func (c *WekaContainer) GetHostIps(subnets []string) []string {
 	mngmtIps := c.Status.GetManagementIps()
 	hostIps := make([]string, 0, len(mngmtIps))
 	port := c.GetPort()
+	parsedSubnets := []net.IPNet{}
+	for _, subnetstr := range subnets {
+		_, subnet, err := net.ParseCIDR(subnetstr)
+		if err != nil {
+			//log/ctx
+			continue
+		}
+		parsedSubnets = append(parsedSubnets, *subnet)
+	}
 	for _, ip := range mngmtIps {
+		if len(parsedSubnets) > 0 {
+			parsedIp := net.ParseIP(ip)
+			if parsedIp == nil {
+				//log/ctx
+				continue
+			}
+			ipInSubnet := false
+			for _, subnet := range parsedSubnets {
+				if subnet.Contains(parsedIp) {
+					ipInSubnet = true
+					break
+				}
+			}
+			if !ipInSubnet {
+				//log/ctx
+				continue
+			}
+		}
+
 		if c.Spec.Ipv6 {
 			hostIps = append(hostIps, fmt.Sprintf("[%s]:%d", ip, port))
 		} else {
@@ -93,6 +122,30 @@ const (
 	ContainerStateDeleting ContainerState = "deleting"
 )
 
+type ContainerStatus string
+
+const (
+	PodNotRunning  ContainerStatus = "PodNotRunning"
+	PodRunning     ContainerStatus = "PodRunning"
+	PodTerminating ContainerStatus = "PodTerminating"
+	WaitForDrivers ContainerStatus = "WaitForDrivers"
+	Running        ContainerStatus = "Running"
+	Stopped        ContainerStatus = "Stopped"
+	Starting       ContainerStatus = "Starting"
+	Deleting       ContainerStatus = "Deleting"
+	Destroying     ContainerStatus = "Destroying"
+	Paused         ContainerStatus = "Paused"
+	Degraded       ContainerStatus = "Degraded"
+	Unhealthy      ContainerStatus = "Unhealthy"
+	Error          ContainerStatus = "Error"
+	DrivesAdding   ContainerStatus = "DrivesAdding"
+	Draining       ContainerStatus = "Draining" // for client containers that are waiting for deletion due to active mounts
+	// for drivers-build and adhoc-op-with-container (sign-dives) container
+	Completed            ContainerStatus = "Completed"
+	Building             ContainerStatus = "Building"
+	TimestampStopAttempt ContainerStatus = "StoppingAttempt"
+)
+
 type WekaContainerSpecOverrides struct {
 	// skips deactivation of container, this is unsafe operation that should be used only when this container will never be back into cluster
 	SkipDeactivate bool `json:"skipDeactivate,omitempty"`
@@ -102,9 +155,19 @@ type WekaContainerSpecOverrides struct {
 	SkipCleanupPersistentDir bool `json:"skipCleanupPersistentDir,omitempty"`
 	// unsafe operation, skips graceful stop of weka container for a quick replacement to a new image, should not be used unless instructed explicitly by weka personnel
 	UpgradeForceReplace      bool   `json:"upgradeForceReplace,omitempty"`
+	UpgradePreventEviction   bool   `json:"upgradePreventEviction,omitempty"`
+	PodDeleteForceReplace    bool   `json:"podDeleteForceReplace,omitempty"`
 	MachineIdentifierNodeRef string `json:"machineIdentifierNodeRef,omitempty"`
 	// script to be executed post initial persistency(if needed) configuration, before running actual workload
 	PreRunScript string `json:"preRunScript,omitempty"`
+	// unsafe operation, forces drain on the node where the container is running, should not be used unless instructed explicitly by weka personnel, the effect of drain is throwing away all IOs and acknowledging all umounts in unsafe manner
+	ForceDrain bool `json:"forceDrain,omitempty"`
+	// option to skip active mounts check before deleting client containers
+	SkipActiveMountsCheck bool `json:"skipActiveMountsCheck,omitempty"`
+	// unsafe operation, runs nsenter in root namespace to umount all wekafs mounts visible on host
+	UmountOnHost bool `json:"umountOnHost,omitempty"`
+	// DebugSleepOnTerminate specifies the number of seconds to sleep on container abnormal exit for debugging purposes
+	DebugSleepOnTerminate int `json:"debugSleepOnTerminate,omitempty"`
 }
 
 type Instructions struct {
@@ -161,14 +224,22 @@ type WekaContainerSpec struct {
 	Instructions          *Instructions        `json:"instructions,omitempty"`
 	NoAffinityConstraints bool                 `json:"dropAffinityConstraints,omitempty"`
 	UploadResultsTo       string               `json:"uploadResultsTo,omitempty"`
-	// +kubebuilder:validation:Enum=manual;all-at-once;rolling
+	// +kubebuilder:validation:Enum=manual;all-at-once;rolling;all-at-once-force
 	// +kubebuilder:default=manual
 	UpgradePolicyType UpgradePolicyType `json:"upgradePolicyType,omitempty"`
 	// +kubebuilder:validation:Enum=active;paused;destroying;deleting
 	// +kubebuilder:default=active
-	State           ContainerState              `json:"state,omitempty"`
-	AllowHotUpgrade bool                        `json:"allowHotUpgrade,omitempty"`
-	Overrides       *WekaContainerSpecOverrides `json:"overrides,omitempty"`
+	State           ContainerState `json:"state,omitempty"`
+	AllowHotUpgrade bool           `json:"allowHotUpgrade,omitempty"`
+	// sets weka cluster-side timeout, if client is not coming back in specified duration it will be auto removed from cluster config
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^(0|([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$"
+	// +kubebuilder:default="0s"
+	AutoRemoveTimeout metav1.Duration             `json:"autoRemoveTimeout,omitempty"`
+	Overrides         *WekaContainerSpecOverrides `json:"overrides,omitempty"`
+	HostPID           bool                        `json:"hostPID,omitempty"`
+	// resources to be proxied as-is to the pod spec
+	Resources *PodResourcesSpec `json:"resources,omitempty"`
 }
 
 type AWSNetwork struct {
@@ -213,6 +284,8 @@ type ContainerPrinterColumns struct {
 	ActiveMounts StringMetric `json:"activeMounts,omitempty"`
 	// pretty-printed management IPs
 	ManagementIPs string `json:"managementIPs,omitempty"`
+	// node name where the container is running
+	NodeAffinity string `json:"nodeAffinity,omitempty"`
 }
 
 func (c *ContainerPrinterColumns) SetManagementIps(ips []string) {
@@ -228,19 +301,22 @@ func (c *ContainerPrinterColumns) SetManagementIps(ips []string) {
 }
 
 type WekaContainerStatus struct {
-	Status             string                   `json:"status"`
-	ManagementIP       string                   `json:"managementIP,omitempty"`
-	ManagementIPs      []string                 `json:"managementIPs,omitempty"`
-	ClusterContainerID *int                     `json:"containerID,omitempty"`
-	ClusterID          string                   `json:"clusterID,omitempty"`
-	Conditions         []metav1.Condition       `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
-	LastAppliedImage   string                   `json:"lastAppliedImage,omitempty"` // Explicit field for upgrade tracking, more generic lastAppliedSpec might be introduced later
-	NodeAffinity       NodeName                 `json:"nodeAffinity,omitempty"`     // active nodeAffinity, copied from spec and populated if nodeSelector was used instead of direct nodeAffinity
-	ExecutionResult    *string                  `json:"result,omitempty"`
-	Allocations        *ContainerAllocations    `json:"allocations,omitempty"`
-	Stats              *WekaContainerMetrics    `json:"stats,omitempty"`
-	PrinterColumns     *ContainerPrinterColumns `json:"printer,omitempty"`
-	Timestamps         map[string]metav1.Time   `json:"timestamps,omitempty"`
+	Status                   ContainerStatus          `json:"status"`
+	InternalStatus           string                   `json:"internalStatus,omitempty"` // weka local container internal status
+	ManagementIP             string                   `json:"managementIP,omitempty"`
+	ManagementIPs            []string                 `json:"managementIPs,omitempty"`
+	ClusterContainerID       *int                     `json:"containerID,omitempty"`
+	ClusterID                string                   `json:"clusterID,omitempty"`
+	Conditions               []metav1.Condition       `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+	LastAppliedImage         string                   `json:"lastAppliedImage,omitempty"` // Explicit field for upgrade tracking, more generic lastAppliedSpec might be introduced later
+	LastAppliedSpec          string                   `json:"lastAppliedSpec,omitempty"`  // set by weka cluster or client or other higher level controller, to track if higher level spec was propagated
+	NodeAffinity             NodeName                 `json:"nodeAffinity,omitempty"`     // active nodeAffinity, copied from spec and populated if nodeSelector was used instead of direct nodeAffinity
+	ExecutionResult          *string                  `json:"result,omitempty"`
+	Allocations              *ContainerAllocations    `json:"allocations,omitempty"`
+	Stats                    *WekaContainerMetrics    `json:"stats,omitempty"`
+	PrinterColumns           *ContainerPrinterColumns `json:"printer,omitempty"`
+	Timestamps               map[string]metav1.Time   `json:"timestamps,omitempty"`
+	NotToleratedOnReschedule bool                     `json:"notToleratedOnReschedule,omitempty"`
 }
 
 func (s *WekaContainerStatus) GetManagementIps() []string {
@@ -384,19 +460,23 @@ func (w *WekaContainer) HasFrontend() bool {
 }
 
 func (w *WekaContainer) IsS3Container() bool {
-	return slices.Contains([]string{WekaContainerModeS3}, w.Spec.Mode)
+	return w.Spec.Mode == WekaContainerModeS3
 }
 
 func (w *WekaContainer) IsNfsContainer() bool {
-	return slices.Contains([]string{WekaContainerModeNfs}, w.Spec.Mode)
+	return w.Spec.Mode == WekaContainerModeNfs
 }
 
 func (w *WekaContainer) HasJoinIps() bool {
-	return w.Spec.JoinIps != nil && len(w.Spec.JoinIps) > 0
+	return len(w.Spec.JoinIps) > 0
 }
 
 func (w *WekaContainer) IsDriveContainer() bool {
-	return slices.Contains([]string{WekaContainerModeDrive}, w.Spec.Mode)
+	return w.Spec.Mode == WekaContainerModeDrive
+}
+
+func (w *WekaContainer) IsComputeContainer() bool {
+	return w.Spec.Mode == WekaContainerModeCompute
 }
 
 func (w *WekaContainer) IsWekaContainer() bool {
@@ -463,7 +543,7 @@ func (w *WekaContainer) IsOneOff() bool {
 }
 
 func (w *WekaContainer) IsClientContainer() bool {
-	return slices.Contains([]string{WekaContainerModeClient}, w.Spec.Mode)
+	return w.Spec.Mode == WekaContainerModeClient
 }
 
 func (w *WekaContainer) IsProtocolContainer() bool {
@@ -481,7 +561,7 @@ func (w *WekaContainer) GetParentClusterId() string {
 }
 
 func (w *WekaContainer) IsEnvoy() bool {
-	return slices.Contains([]string{WekaContainerModeEnvoy}, w.Spec.Mode)
+	return w.Spec.Mode == WekaContainerModeEnvoy
 }
 
 func (w *WekaContainer) GetPort() int {
