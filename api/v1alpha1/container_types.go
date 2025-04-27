@@ -245,6 +245,7 @@ type WekaContainerSpec struct {
 type AWSNetwork struct {
 	// should provide list of additional nics indexes starting from 1, index 0 is reserved for kernel networking
 	DeviceSlots []int `json:"deviceSlots,omitempty"`
+	Dpdk        *bool `json:"dpdk,omitempty"`
 }
 
 type Network struct {
