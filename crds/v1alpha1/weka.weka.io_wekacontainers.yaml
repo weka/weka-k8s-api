@@ -1167,6 +1167,8 @@ spec:
                         items:
                           type: integer
                         type: array
+                      dpdk:
+                        type: boolean
                     type: object
                   deviceSubnets:
                     description: subnet that is used for devices auto-discovery
