@@ -177,6 +177,21 @@ type Instructions struct {
 	Payload string `json:"payload,omitempty"`
 }
 
+// DNSPolicy defines the DNS policy configuration for a pod
+type DNSPolicy struct {
+	// Kubernetes network DNS policy (if empty, default will be used)
+	K8sNetwork string `json:"k8sNetwork,omitempty"`
+	// Whether to use host network
+	HostNetwork bool `json:"hostNetwork,omitempty"`
+}
+
+func (p *DNSPolicy) Equals(other *DNSPolicy) bool {
+	if p == nil || other == nil {
+		return p == other
+	}
+	return p.K8sNetwork == other.K8sNetwork && p.HostNetwork == other.HostNetwork
+}
+
 type WekaContainerSpec struct {
 	// name of the node where the container should run on
 	NodeAffinity NodeName `json:"nodeAffinity,omitempty"`
@@ -247,6 +262,15 @@ type WekaContainerSpec struct {
 	// +kubebuilder:validation:Type=string
 	// EXPERIMENTAL, ALPHA STATE, should not be used in production: computed csi driver name for client container to ensure csi-node
 	CsiDriverName string `json:"csiDriverName,omitempty"`
+	// DNS policy configuration
+	DNSPolicy *DNSPolicy `json:"dnsPolicy,omitempty"`
+}
+
+func (d *DNSPolicy) GetDNSPolicy() v1.DNSPolicy {
+	if d.K8sNetwork != "" {
+		return v1.DNSPolicy(d.K8sNetwork)
+	}
+	return ""
 }
 
 type AWSNetwork struct {
@@ -637,4 +661,11 @@ func (c *WekaContainerSpec) GetOverrides() *WekaContainerSpecOverrides {
 	} else {
 		return c.Overrides
 	}
+}
+
+func (c *WekaContainerSpec) GetK8sDNSPolicy() v1.DNSPolicy {
+	if c.DNSPolicy != nil {
+		return c.DNSPolicy.GetDNSPolicy()
+	}
+	return ""
 }
