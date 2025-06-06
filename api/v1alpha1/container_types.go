@@ -352,6 +352,13 @@ func (s *WekaContainerStatus) GetPrinterColumns() *ContainerPrinterColumns {
 	return s.PrinterColumns
 }
 
+func (s *WekaContainerStatus) GetStats() *WekaContainerMetrics {
+	if s.Stats == nil {
+		return &WekaContainerMetrics{}
+	}
+	return s.Stats
+}
+
 // TraceConfiguration defines the configuration for the traces, accepts parameters in gigabytes
 type TracesConfiguration struct {
 	// +kubebuilder:default=10

@@ -7,7 +7,7 @@ import (
 
 // WekaManualOperationSpec defines the desired state of WekaManualOperation
 type WekaManualOperationSpec struct {
-	// +kubebuilder:validation:Enum=sign-drives;discover-drives;force-resign-drives;block-drives;unblock-drives;ensure-nics;remote-traces-session
+	// +kubebuilder:validation:Enum=sign-drives;discover-drives;force-resign-drives;block-drives;unblock-drives;replace-drives;ensure-nics;remote-traces-session
 	Action             string                `json:"action"`
 	Payload            ManualOperatorPayload `json:"payload"`
 	Image              *string               `json:"image,omitempty"`
@@ -54,6 +54,7 @@ type ManualOperatorPayload struct {
 	DiscoverDrives            *DiscoverDrivesPayload     `json:"discoverDrivesPayload,omitempty"`
 	EnsureNICs                *EnsureNICsPayload         `json:"ensureNICsPayload,omitempty"`
 	ForceResignDrives         *ForceResignDrivesPayload  `json:"forceResignDrivesPayload,omitempty"`
+	ReplaceDrives             *ReplaceDrivesPayload      `json:"replaceDrivesPayload,omitempty"`
 	RemoteTracesSessionConfig *RemoteTracesSessionConfig `json:"remoteTracesSessionPayload,omitempty"`
 }
 
@@ -121,6 +122,13 @@ type BlockDrivesPayload struct {
 
 type DiscoverDrivesPayload struct {
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+}
+
+type ReplaceDrivesPayload struct {
+	OldSerialIDs []string `json:"oldSerialIDs"`
+	// optional, if not provided, the operator will use available drives on the node
+	NewSerialIDs []string `json:"newSerialIDs,omitempty"`
+	NodeName     NodeName `json:"nodeName"`
 }
 
 type RemoteTracesSessionConfig struct {
