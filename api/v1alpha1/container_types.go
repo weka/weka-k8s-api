@@ -36,6 +36,13 @@ type WekaContainer struct {
 	Status WekaContainerStatus `json:"status,omitempty"`
 }
 
+func (c *WekaContainer) GetPodName() string {
+	if c.Status.PodName != nil {
+		return *c.Status.PodName
+	}
+	return c.ObjectMeta.Name
+}
+
 func (c *WekaContainer) GetHostIps(subnets []string) []string {
 	mngmtIps := c.Status.GetManagementIps()
 	hostIps := make([]string, 0, len(mngmtIps))
@@ -324,6 +331,7 @@ type WekaContainerStatus struct {
 	PrinterColumns           *ContainerPrinterColumns `json:"printer,omitempty"`
 	Timestamps               map[string]metav1.Time   `json:"timestamps,omitempty"`
 	NotToleratedOnReschedule bool                     `json:"notToleratedOnReschedule,omitempty"`
+	PodName                  *string                  `json:"podName,omitempty"` // name of the pod corresponding to this container (if not set, pod name is the same as container name)
 }
 
 func (s *WekaContainerStatus) GetManagementIps() []string {
