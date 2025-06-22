@@ -513,7 +513,7 @@ func (w *WekaContainer) IsWekaContainer() bool {
 }
 
 func (w *WekaContainer) IsAllocatable() bool {
-	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeEnvoy, WekaContainerModeS3, WekaContainerModeNfs}, w.Spec.Mode)
+	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeEnvoy, WekaContainerModeS3, WekaContainerModeNfs, WekaContainerModeClient}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) MustHaveNodeAffinity() bool {
