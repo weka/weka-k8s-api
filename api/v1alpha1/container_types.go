@@ -246,11 +246,6 @@ type WekaContainerSpec struct {
 	PVC       *PVCConfig        `json:"pvc,omitempty"`
 }
 
-type AWSNetwork struct {
-	// should provide list of additional nics indexes starting from 1, index 0 is reserved for kernel networking
-	DeviceSlots []int `json:"deviceSlots,omitempty"`
-}
-
 type ContainerAllocations struct {
 	Drives    []string `json:"drives,omitempty"`
 	EthSlots  []string `json:"ethSlots,omitempty"`
