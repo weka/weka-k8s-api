@@ -196,6 +196,7 @@ type WekaContainerSpec struct {
 	AgentPort         int                `json:"agentPort,omitempty"`
 	PortRange         *PortRange         `json:"portRange,omitempty"`
 	Image             string             `json:"image"`
+	ClusterImage      string             `json:"requestedVersion,omitempty"`
 	ImagePullSecret   string             `json:"imagePullSecret,omitempty"`
 	WekaContainerName string             `json:"name"`
 	// +kubebuilder:validation:Enum=drive;compute;client;dist;drivers-dist;drivers-loader;drivers-builder;discovery;s3;adhoc-op-with-container;adhoc-op;envoy;nfs
