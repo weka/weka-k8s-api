@@ -7,9 +7,9 @@ const (
 	CondAdminUserDeleted             = "CondAdminUserDeleted"
 	CondClusterClientSecretsCreated  = "ClusterClientsSecretsCreated"
 	CondClusterClientSecretsApplied  = "ClusterClientsSecretsApplied"
-	CondClusterCSISecretsCreated     = "ClusterCSIsSecretsCreated"
+	CondClusterCsiSecretsCreated     = "ClusterCsiSecretsCreated"
 	WekaHomeConfigured               = "WekaHomeConfigured"
-	CondClusterCSISecretsApplied     = "ClusterCSIsSecretsApplied"
+	CondClusterCsiSecretsApplied     = "ClusterCsiSecretsApplied"
 	CondDefaultFsCreated             = "CondDefaultFsCreated"
 	CondS3ClusterCreated             = "CondS3ClusterCreated" // not pre-set on purpose, as optional
 	ConfNfsConfigured                = "NfsConfigured"
@@ -38,4 +38,7 @@ const (
 	CondContainerAffinitySet         = "ContainerAffinitySet"
 	CondContainerImageUpdated        = "ContainerImageUpdated"
 	CondClusterReady                 = "ClusterIsReady"
+	CondContainerMigratedOutFromPVC  = "MigratedOutFromPVC"
+	CondCsiDeployed                  = "CsiDeployed"
+	CondClusterKMSConfigured         = "KMSConfigured"
 )

@@ -38,15 +38,22 @@ const (
 )
 
 type NetworkSelector struct {
-	EthSlots   []string   `json:"ethSlots,omitempty"`
-	EthDevice  string     `json:"ethDevice,omitempty"`
-	EthDevices []string   `json:"ethDevices,omitempty"`
-	Gateway    string     `json:"gateway,omitempty"`
-	AWS        AWSNetwork `json:"aws,omitempty"`
-	UdpMode    bool       `json:"udpMode,omitempty"`
+	Subnet      string   `json:"subnet,omitempty"`
+	Min         int      `json:"min,omitempty"`
+	Max         int      `json:"max,omitempty"`
+	DeviceNames []string `json:"deviceNames,omitempty"`
+}
+
+type Network struct {
+	EthDevice  string   `json:"ethDevice,omitempty"`
+	EthDevices []string `json:"ethDevices,omitempty"`
+	Gateway    string   `json:"gateway,omitempty"`
+	UdpMode    bool     `json:"udpMode,omitempty"`
 	// subnet that is used for devices auto-discovery
 	// +kubebuilder:validation:items:Pattern="^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}$"
-	DeviceSubnets []string `json:"deviceSubnets,omitempty"`
+	DeviceSubnets          []string          `json:"deviceSubnets,omitempty"`
+	Selectors              []NetworkSelector `json:"selectors,omitempty"`
+	ManagementIPsSelectors []NetworkSelector `json:"managementIpsSelectors,omitempty"`
 }
 
 type AdditionalMemory struct {
@@ -110,29 +117,53 @@ type WekaHomeConfig struct {
 }
 
 type RoleNodeSelector struct {
-	// node selector for compute weka containers
-	Compute map[string]string `json:"compute,omitempty"`
-	// node selector for drive weka containers
-	Drive map[string]string `json:"drive,omitempty"`
-	// node selector for s3 weka containers, envoy will be scheduled by affinity to s3 and not explicit node selector
-	S3 map[string]string `json:"s3,omitempty"`
-	// node selector for nfs weka containers
-	Nfs map[string]string `json:"nfs,omitempty"`
+	// nodeSelector for compute weka containers
+	Compute *map[string]string `json:"compute,omitempty"`
+	// nodeSelector for drive weka containers
+	Drive *map[string]string `json:"drive,omitempty"`
+	// nodeSelector for s3 weka containers
+	S3 *map[string]string `json:"s3,omitempty"`
+	// nodeSelector for nfs weka containers
+	Nfs *map[string]string `json:"nfs,omitempty"`
 }
 
-func (s RoleNodeSelector) ForRole(role string) map[string]string {
-	switch role {
-	case "compute":
-		return s.Compute
-	case "drive":
-		return s.Drive
-	case "s3":
-		return s.S3
-	case "nfs":
-		return s.Nfs
-	default:
-		return nil
-	}
+type RoleAnnotations struct {
+	// annotations for compute weka containers
+	Compute *map[string]string `json:"compute,omitempty"`
+	// annotations for drive weka containers
+	Drive *map[string]string `json:"drive,omitempty"`
+	// annotations for s3 weka containers
+	S3 *map[string]string `json:"s3,omitempty"`
+	// annotations for nfs weka containers
+	Nfs *map[string]string `json:"nfs,omitempty"`
+}
+
+type RoleNetworkSelector struct {
+	// network selector for compute weka containers
+	Compute *Network `json:"compute,omitempty"`
+	// network selector for drive weka containers
+	Drive *Network `json:"drive,omitempty"`
+	// network selector for s3 weka containers
+	S3 *Network `json:"s3,omitempty"`
+	// network selector for nfs weka containers
+	Nfs *Network `json:"nfs,omitempty"`
+}
+
+// RoleCoreIds defines CPU core id lists per container role for Manual CPU policy.
+// Each slice contains the core IDs (as visible to the node OS) that should be
+// pinned to every container of the corresponding role. If a slice is empty or
+// omitted, no explicit core pinning will be applied for that role.
+// +kubebuilder:validation:Type=object
+// +kubebuilder:validation:Optional
+type RoleCoreIds struct {
+	// +kubebuilder:validation:Optional
+	Compute []int `json:"compute,omitempty"`
+	// +kubebuilder:validation:Optional
+	Drive []int `json:"drive,omitempty"`
+	// +kubebuilder:validation:Optional
+	S3 []int `json:"s3,omitempty"`
+	// +kubebuilder:validation:Optional
+	Nfs []int `json:"nfs,omitempty"`
 }
 
 type RoleTopologySpreadConstraints struct {
@@ -162,21 +193,6 @@ type RoleAffinity struct {
 	Drive   *v1.Affinity `json:"drive,omitempty"`
 	S3      *v1.Affinity `json:"s3,omitempty"`
 	Nfs     *v1.Affinity `json:"nfs,omitempty"`
-}
-
-func (a *RoleAffinity) ForRole(role string) *v1.Affinity {
-	switch role {
-	case "compute":
-		return a.Compute
-	case "drive":
-		return a.Drive
-	case "s3":
-		return a.S3
-	case "nfs":
-		return a.Nfs
-	default:
-		return nil
-	}
 }
 
 type PodConfiguration struct {
@@ -211,7 +227,38 @@ type FailureDomain struct {
 }
 
 type CsiConfig struct {
-	EndpointsSubnets []string `json:"endpointsSubnets,omitempty"`
+	EndpointsSubnets []string           `json:"endpointsSubnets,omitempty"`
+	CsiGroup         string             `json:"csiGroup,omitempty"`
+	Advanced         *AdvancedCsiConfig `json:"advanced,omitempty"`
+}
+
+type VaultConfig struct {
+	// Vault address, e.g. "https://vault.example.com:8200".
+	Address string `json:"address"`
+
+	// Role to authenticate as in Vault.
+	Role string `json:"role"`
+
+	// +kubebuilder:default=kubernetes
+	// Path under auth/ that the weka uses for login. defaults to "kubernetes"
+	AuthPath string `json:"authPath,omitempty"`
+
+	// +kubebuilder:default=transit
+	// Transit engine mount path, defaults "transit".
+	TransitPath string `json:"transitPath,omitempty"`
+
+	// +kubebuilder:validation:Enum=kubernetes
+	// +kubebuilder:default=kubernetes
+	// Vault Auth method (only “kubernetes” is supported  on operator side.)
+	Method string `json:"method,omitempty"`
+
+	// +kubebuilder:default=weka-key
+	// Name of the transit key. defaults to "weka-key"
+	KeyName string `json:"keyName,omitempty"`
+}
+
+type EncryptionConfig struct {
+	VaultConfig *VaultConfig `json:"vault,omitempty"`
 }
 
 // WekaClusterSpec defines the desired state of WekaCluster
@@ -230,11 +277,18 @@ type WekaClusterSpec struct {
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 	// node selector for the weka containers per role, overrides global nodeSelector
 	RoleNodeSelector RoleNodeSelector `json:"roleNodeSelector,omitempty"`
+	// annotations for the weka containers per role
+	RoleAnnotations RoleAnnotations `json:"roleAnnotations,omitempty"`
+	// network selector for the weka containers per role, overrides global network
+	RoleNetworkSelector RoleNetworkSelector `json:"roleNetworkSelector,omitempty"`
 	// failure domain configuration for weka containers
 	FailureDomain *FailureDomain `json:"failureDomain,omitempty"`
 	// advanced pod affinities configuration
 	PodConfig *PodConfiguration `json:"podConfig,omitempty"`
 	// cpu policy to use for scheduling cores for weka, unless instructed by weka team, keep default of auto
+	// manual and shared are same, with shared being deprecated
+	// when manual is used - no exclusive cores will be allocaated on k8s/cgroup level, assuming good alignment of cores usage across different applications, like weka and slurm
+	// there is no need to specify siblings in this list, but on the side of other applications like slurm, both weka core and its siblings should be excluded from used cpu set
 	//+kubebuilder:validation:Enum=auto;shared;dedicated;dedicated_ht;manual
 	//+kubebuilder:default=auto
 	CpuPolicy CpuPolicy `json:"cpuPolicy,omitempty"`
@@ -259,7 +313,7 @@ type WekaClusterSpec struct {
 	// weka cluster topology configuration
 	Dynamic *WekaConfig `json:"dynamicTemplate,omitempty"`
 	// weka cluster network configuration
-	NetworkSelector NetworkSelector `json:"network,omitempty"`
+	Network Network `json:"network,omitempty"`
 	// A hot spare is reserved capacity designed to handle data rebuilds while maintaining the system's net capacity, even in the event of failure domains being lost
 	// See: https://docs.weka.io/weka-system-overview/ssd-capacity-management#hot-spare
 	// +kubebuilder:default=0
@@ -285,6 +339,26 @@ type WekaClusterSpec struct {
 	GracefulDestroyDuration metav1.Duration           `json:"gracefulDestroyDuration,omitempty"`
 	Overrides               *WekaClusterSpecOverrides `json:"overrides,omitempty"`
 	CsiConfig               CsiConfig                 `json:"csiConfig,omitempty"`
+	GlobalPVC               *PVCConfig                `json:"globalPVC,omitempty"`
+	ServiceAccountName      string                    `json:"serviceAccountName,omitempty"`
+	// RoleCoreIds defines a list of CPU core IDs (as seen by the host) that should
+	// be assigned to containers of the specific role when CpuPolicy is set to
+	// "manual". If the slice for the given role is empty, core ids will not be
+	// set for that role, and the manual policy will fail validation on pod start.
+	//
+	// NOTE: The semantics are the same as for NodeSelector/Annotations structures –
+	// a single list per role which will be copied to every container of that role.
+	// Users are responsible to provide a set that makes sense for their topology.
+	// +kubebuilder:validation:Type=object
+	// Example:
+	//   roleCoreIds:
+	//     compute: [0,1,2,3]
+	//     drive:   [4,5,6,7]
+	//
+	// will result in every compute container getting coreIds [0,1,2,3] and every
+	// drive container getting [4,5,6,7].
+	RoleCoreIds RoleCoreIds       `json:"roleCoreIds,omitempty"`
+	Encryption  *EncryptionConfig `json:"encryption,omitempty"`
 }
 
 func (c *WekaClusterSpec) GetOverrides() *WekaClusterSpecOverrides {
@@ -301,6 +375,11 @@ func (c *WekaClusterSpec) GetStartIoConditions() *StartIoConditions {
 	} else {
 		return c.StartIoConditions
 	}
+}
+
+type PVCConfig struct {
+	Name string `json:"name"`
+	Path string `json:"path,omitempty"`
 }
 
 type WekaClusterSpecOverrides struct {
@@ -364,6 +443,7 @@ type WekaClusterStatus struct {
 // +kubebuilder:printcolumn:name="DRVS(A/C/D)",type="string",JSONPath=".status.printer.drives",description="Number of Drives: Active/Created/Desired",priority=0
 // +kubebuilder:printcolumn:name="IOPS(R/W/M)",type="string",JSONPath=".status.printer.iops",description="IOPS Read/Write/Metadata",priority=1
 // +kubebuilder:printcolumn:name="THRPT(R/W)",type="string",JSONPath=".status.printer.throughput",description="Throughput Read/Write",priority=1
+// +kubebuilder:printcolumn:name="FS(Capacity)",type="string",JSONPath=".status.printer.filesystemCapacity",description="Filesystem Capacity",priority=1
 
 type WekaCluster struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -417,8 +497,16 @@ func (c *WekaCluster) GetClientSecretName() string {
 	return "weka-client-" + name
 }
 
-func (c *WekaCluster) GetCSISecretName() string {
-	return "weka-csi-" + c.Name
+func GetClientSecretName(clusterName string) string {
+	return "weka-client-" + clusterName
+}
+
+func GetCsiSecretName(clusterName string) string {
+	return "weka-csi-" + clusterName
+}
+
+func (c *WekaCluster) GetCsiSecretName() string {
+	return GetCsiSecretName(c.Name)
 }
 
 func (status *WekaClusterStatus) InitStatus() {
@@ -426,8 +514,8 @@ func (status *WekaClusterStatus) InitStatus() {
 	status.Status = WekaClusterStatusInit
 }
 
-func (w *WekaCluster) ToOwnerObject() *WekaContainerDetails {
-	return &WekaContainerDetails{
+func (w *WekaCluster) ToOwnerObject() *WekaOwnerDetails {
+	return &WekaOwnerDetails{
 		Image:           w.Spec.Image,
 		ImagePullSecret: w.Spec.ImagePullSecret,
 		Tolerations:     util.ExpandTolerations([]v1.Toleration{}, w.Spec.Tolerations, w.Spec.RawTolerations),
@@ -435,7 +523,7 @@ func (w *WekaCluster) ToOwnerObject() *WekaContainerDetails {
 	}
 }
 
-func (c *WekaCluster) GetClusterCSIUsername() string {
+func (c *WekaCluster) GetClusterCsiUsername() string {
 	return "wekacsi" + c.GetLastGuidPart()
 }
 
@@ -457,6 +545,137 @@ func (c *WekaCluster) IsExpand() bool {
 
 func (c *WekaCluster) GetGracefulDestroyDuration() time.Duration {
 	return c.Spec.GracefulDestroyDuration.Duration
+}
+
+// Use role-specific node selector if set, otherwise use cluster node selector
+func (c *WekaCluster) GetNodeSelectorForRole(role string) map[string]string {
+	var roleNodeSelector *map[string]string
+
+	switch role {
+	case "compute":
+		roleNodeSelector = c.Spec.RoleNodeSelector.Compute
+	case "drive":
+		roleNodeSelector = c.Spec.RoleNodeSelector.Drive
+	case "s3":
+		roleNodeSelector = c.Spec.RoleNodeSelector.S3
+	case "nfs":
+		roleNodeSelector = c.Spec.RoleNodeSelector.Nfs
+	}
+
+	if roleNodeSelector != nil {
+		return *roleNodeSelector
+	} else {
+		return c.Spec.NodeSelector
+	}
+}
+
+// Use role-specific annotations if set, otherwise use cluster annotations
+func (c *WekaCluster) GetAnnotationsForRole(role string) map[string]string {
+	var roleAnnotations *map[string]string
+
+	switch role {
+	case "compute":
+		roleAnnotations = c.Spec.RoleAnnotations.Compute
+	case "drive":
+		roleAnnotations = c.Spec.RoleAnnotations.Drive
+	case "s3":
+		roleAnnotations = c.Spec.RoleAnnotations.S3
+	case "nfs":
+		roleAnnotations = c.Spec.RoleAnnotations.Nfs
+	}
+
+	if roleAnnotations != nil {
+		return *roleAnnotations
+	} else {
+		return c.ObjectMeta.GetAnnotations()
+	}
+}
+
+// Use role-specific network selector if set, otherwise use cluster network selector
+func (c *WekaCluster) GetNetworkForRole(role string) Network {
+	var roleNetworkSelector *Network
+
+	switch role {
+	case "compute":
+		roleNetworkSelector = c.Spec.RoleNetworkSelector.Compute
+	case "drive":
+		roleNetworkSelector = c.Spec.RoleNetworkSelector.Drive
+	case "s3":
+		roleNetworkSelector = c.Spec.RoleNetworkSelector.S3
+	case "nfs":
+		roleNetworkSelector = c.Spec.RoleNetworkSelector.Nfs
+	}
+
+	if roleNetworkSelector != nil {
+		return *roleNetworkSelector
+	} else {
+		return c.Spec.Network
+	}
+}
+
+// Return the CPU core IDs for the specified role.
+func (c *WekaCluster) GetCoreIdsForRole(role string) []int {
+	switch role {
+	case "compute":
+		return c.Spec.RoleCoreIds.Compute
+	case "drive":
+		return c.Spec.RoleCoreIds.Drive
+	case "s3":
+		return c.Spec.RoleCoreIds.S3
+	case "nfs":
+		return c.Spec.RoleCoreIds.Nfs
+	default:
+		return nil
+	}
+}
+
+// Use role-specific affinity if set, otherwise use cluster affinity from PodConfig.
+func (c *WekaCluster) GetAffinityForRole(role string) *v1.Affinity {
+	if c.Spec.PodConfig == nil {
+		return nil
+	}
+
+	if c.Spec.PodConfig.RoleAffinity == nil {
+		return c.Spec.PodConfig.Affinity
+	}
+
+	var affinity *v1.Affinity
+
+	switch role {
+	case "compute":
+		affinity = c.Spec.PodConfig.RoleAffinity.Compute
+	case "drive":
+		affinity = c.Spec.PodConfig.RoleAffinity.Drive
+	case "s3":
+		affinity = c.Spec.PodConfig.RoleAffinity.S3
+	case "nfs":
+		affinity = c.Spec.PodConfig.RoleAffinity.Nfs
+	}
+
+	if affinity != nil {
+		return affinity
+	} else {
+		return c.Spec.PodConfig.Affinity
+	}
+}
+
+// Use role-specific topology spread constraints if set, otherwise use cluster topology spread constraints from PodConfig.
+func (c *WekaCluster) GetTopologySpreadConstraintsForRole(role string) []v1.TopologySpreadConstraint {
+	if c.Spec.PodConfig == nil {
+		return nil
+	}
+
+	if c.Spec.PodConfig.RoleTopologySpreadConstraints == nil {
+		return c.Spec.PodConfig.TopologySpreadConstraints
+	}
+
+	topologySpreadConstraints := c.Spec.PodConfig.RoleTopologySpreadConstraints.ForRole(role)
+
+	if topologySpreadConstraints != nil {
+		return topologySpreadConstraints
+	} else {
+		return c.Spec.PodConfig.TopologySpreadConstraints
+	}
 }
 
 func init() {

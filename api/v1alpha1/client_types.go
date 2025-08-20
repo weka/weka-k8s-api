@@ -95,6 +95,21 @@ type PodResourcesSpec struct {
 	Limits   PodResources `json:"limits,omitempty"`
 }
 
+type ClientCsiConfig struct {
+	CsiGroup                  string             `json:"csiGroup,omitempty"`
+	DisableControllerCreation bool               `json:"disableControllerCreation,omitempty"`
+	Advanced                  *AdvancedCsiConfig `json:"advanced,omitempty"`
+}
+
+type AdvancedCsiConfig struct {
+	EnforceTrustedHttps   bool              `json:"enforceTrustedHttps,omitempty"`
+	NodeLabels            map[string]string `json:"nodeLabels,omitempty"`
+	NodeTolerations       []v1.Toleration   `json:"nodeTolerations,omitempty"`
+	ControllerLabels      map[string]string `json:"controllerLabels,omitempty"`
+	ControllerTolerations []v1.Toleration   `json:"controllerTolerations,omitempty"`
+	SkipGarbageCollection bool              `json:"skipGarbageCollection,omitempty"`
+}
+
 // WekaClientSpec defines the desired state of WekaClient
 type WekaClientSpec struct {
 	// full container image in format of quay.io/weka.io/weka-in-container:VERSION
@@ -109,7 +124,7 @@ type WekaClientSpec struct {
 	PortRange          *PortRange        `json:"portRange,omitempty"`
 	NodeSelector       map[string]string `json:"nodeSelector,omitempty"`
 	WekaSecretRef      string            `json:"wekaSecretRef,omitempty"`
-	NetworkSelector    NetworkSelector   `json:"network,omitempty"`
+	Network            Network           `json:"network,omitempty"`
 	DriversDistService string            `json:"driversDistService,omitempty"`
 	DriversLoaderImage string            `json:"driversLoaderImage,omitempty"`
 	JoinIps            []string          `json:"joinIpPorts,omitempty"`
@@ -123,6 +138,7 @@ type WekaClientSpec struct {
 	TracesConfiguration *TracesConfiguration `json:"tracesConfiguration,omitempty"`
 	Tolerations         []string             `json:"tolerations,omitempty"`
 	RawTolerations      []v1.Toleration      `json:"rawTolerations,omitempty"`
+	ServiceAccountName  string               `json:"serviceAccountName,omitempty"`
 	// memory to add/decrease from "auto-calculated" memory
 	AdditionalMemory int `json:"additionalMemory,omitempty"`
 	// experimental: pod resources to be proxied as-is to the pod spec
@@ -143,6 +159,18 @@ type WekaClientSpec struct {
 	// +kubebuilder:default="24h"
 	// sets weka cluster-side timeout, if client is not coming back in specified duration it will be auto removed from cluster config
 	AutoRemoveTimeout metav1.Duration `json:"autoRemoveTimeout,omitempty"`
+	GlobalPVC         *PVCConfig      `json:"globalPVC,omitempty"`
+
+	// +kubebuilder:validation:Type=object
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: if set, allows to reuse the same csi resources for multiple clients
+	CsiConfig *ClientCsiConfig `json:"csiConfig,omitempty"`
+}
+
+func (c *WekaClientSpec) GetCsiConfig() ClientCsiConfig {
+	if c.CsiConfig == nil {
+		return ClientCsiConfig{}
+	}
+	return *c.CsiConfig
 }
 
 // WekaClientStatus defines the observed state of WekaClient
@@ -171,7 +199,6 @@ type ClientMetrics struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.status",description="Resource status",priority=0
 // +kubebuilder:printcolumn:name="Target Cluster",type="string",JSONPath=".spec.targetCluster.name",description="Name of the target cluster if exists",priority=0
 // +kubebuilder:printcolumn:name="Cores",type="integer",JSONPath=".spec.coresNum",description="Number of cores",priority=0
-// +kubebuilder:printcolumn:name="Join IPs",type="string",JSONPath=".spec.joinIpPorts",description="IPs of the target cluster",priority=1
 // +kubebuilder:printcolumn:name="Containers(A/C/D)",type="string",JSONPath=".status.printer.containers",description="Number of client containers: Active/Created/Desired",priority=0
 
 // WekaClient is the Schema for the clients API

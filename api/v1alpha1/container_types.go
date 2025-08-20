@@ -125,6 +125,7 @@ const (
 type ContainerStatus string
 
 const (
+	Init           ContainerStatus = "Init"
 	PodNotRunning  ContainerStatus = "PodNotRunning"
 	PodRunning     ContainerStatus = "PodRunning"
 	PodTerminating ContainerStatus = "PodTerminating"
@@ -168,6 +169,8 @@ type WekaContainerSpecOverrides struct {
 	UmountOnHost bool `json:"umountOnHost,omitempty"`
 	// DebugSleepOnTerminate specifies the number of seconds to sleep on container abnormal exit for debugging purposes
 	DebugSleepOnTerminate int `json:"debugSleepOnTerminate,omitempty"`
+	// MigrateOutFromPvc specifies that the container should be migrated out from PVC into local storage, this will be done prior to starting pod
+	MigrateOutFromPvc bool `json:"migrateOutFromPvc,omitempty"`
 }
 
 type Instructions struct {
@@ -240,22 +243,12 @@ type WekaContainerSpec struct {
 	HostPID           bool                        `json:"hostPID,omitempty"`
 	// resources to be proxied as-is to the pod spec
 	Resources *PodResourcesSpec `json:"resources,omitempty"`
+	PVC       *PVCConfig        `json:"pvc,omitempty"`
 }
 
 type AWSNetwork struct {
 	// should provide list of additional nics indexes starting from 1, index 0 is reserved for kernel networking
 	DeviceSlots []int `json:"deviceSlots,omitempty"`
-}
-
-type Network struct {
-	EthDevices []string   `json:"ethDevices,omitempty"`
-	EthDevice  string     `json:"ethDevice,omitempty"`
-	UdpMode    bool       `json:"udpMode,omitempty"`
-	AWS        AWSNetwork `json:"aws,omitempty"`
-	Gateway    string     `json:"gateway,omitempty"`
-	// subnet that is used for devices auto-discovery
-	// +kubebuilder:validation:items:Pattern="^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}$"
-	DeviceSubnets []string `json:"deviceSubnets,omitempty"`
 }
 
 type ContainerAllocations struct {
@@ -268,6 +261,28 @@ type ContainerAllocations struct {
 	FailureDomain     *string  `json:"failureDomain,omitempty"`
 	MachineIdentifier string   `json:"machineIdentifier,omitempty"`
 	NetDevices        []string `json:"netDevices,omitempty"`
+}
+
+func (c *ContainerAllocations) Equals(other *ContainerAllocations) bool {
+	if c == nil && other == nil {
+		return true
+	}
+	if c == nil || other == nil {
+		return false
+	}
+	if c.LbPort != other.LbPort || c.WekaPort != other.WekaPort || c.AgentPort != other.AgentPort {
+		return false
+	}
+	if !slices.Equal(c.Drives, other.Drives) || !slices.Equal(c.EthSlots, other.EthSlots) || !slices.Equal(c.NetDevices, other.NetDevices) {
+		return false
+	}
+	if (c.FailureDomain == nil && other.FailureDomain != nil) || (c.FailureDomain != nil && other.FailureDomain == nil) {
+		return false
+	}
+	if c.FailureDomain != nil && *c.FailureDomain != *other.FailureDomain {
+		return false
+	}
+	return true
 }
 
 type WekaContainerMetrics struct {
@@ -301,6 +316,7 @@ func (c *ContainerPrinterColumns) SetManagementIps(ips []string) {
 }
 
 type WekaContainerStatus struct {
+	// +kubebuilder:default="Init"
 	Status                   ContainerStatus          `json:"status"`
 	InternalStatus           string                   `json:"internalStatus,omitempty"` // weka local container internal status
 	ManagementIP             string                   `json:"managementIP,omitempty"`
@@ -342,12 +358,25 @@ type TracesConfiguration struct {
 	MaxCapacityPerIoNode int `json:"maxCapacityPerIoNode,omitempty"`
 	// +kubebuilder:default=20
 	EnsureFreeSpace int `json:"ensureFreeSpace,omitempty"`
+	// +kubebuilder:default=auto
+	// +kubebuilder:validation:Enum=override;partial-override;auto;cluster
+	DumperConfigMode DumperConfigMode `json:"dumperConfigMode,omitempty"`
 }
+
+type DumperConfigMode string
+
+const (
+	DumperConfigModeAuto            DumperConfigMode = "auto"
+	DumperConfigModeOverride        DumperConfigMode = "override"
+	DumperConfigOverrideModePartial DumperConfigMode = "partial-override"
+	DumperConfigOverrideModeCluster DumperConfigMode = "cluster"
+)
 
 func GetDefaultTracesConfiguration() *TracesConfiguration {
 	return &TracesConfiguration{
 		MaxCapacityPerIoNode: 10,
 		EnsureFreeSpace:      20,
+		DumperConfigMode:     DumperConfigModeAuto,
 	}
 }
 
@@ -389,11 +418,18 @@ func (w *WekaContainer) IsDistMode() bool {
 }
 
 func (w *WekaContainer) IsDriversLoaderMode() bool {
-	return w.Spec.Mode == WekaContainerModeDriversLoader
+	// Check for legacy drivers-loader mode
+	if w.Spec.Mode == WekaContainerModeDriversLoader {
+		return true
+	}
+	// Check for new adhoc-op-with-container mode with load-drivers instructions
+	return w.Spec.Mode == WekaContainerModeAdhocOpWC &&
+		w.Spec.Instructions != nil &&
+		w.Spec.Instructions.Type == InstructionTypeLoadDrivers
 }
 
 func (w *WekaContainer) RequiresDrivers() bool {
-	return w.IsWekaContainer() && !w.IsDistMode() && !w.IsEnvoy()
+	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsEnvoy()
 }
 
 func (w *WekaContainer) IsServiceContainer() bool {
@@ -410,11 +446,11 @@ func (w *WekaContainer) IsServiceContainer() bool {
 }
 
 func (w *WekaContainer) IsHostNetwork() bool {
-	return w.IsWekaContainer() && !w.IsDistMode()
+	return w.IsWekaContainer() && !w.IsDriversContainer()
 }
 
 func (w *WekaContainer) ShouldJoinCluster() bool {
-	return w.IsWekaContainer() && !w.IsDistMode() && !w.IsEnvoy()
+	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsEnvoy()
 }
 
 func (w *WekaContainer) IsDriversContainer() bool {
@@ -488,6 +524,7 @@ func (w *WekaContainer) IsWekaContainer() bool {
 		WekaContainerModeEnvoy,
 		WekaContainerModeDist,
 		WekaContainerModeDriversDist,
+		WekaContainerModeDriversBuilder,
 		WekaContainerModeNfs,
 	}, w.Spec.Mode)
 }
@@ -508,6 +545,7 @@ func (w *WekaContainer) HasAgent() bool {
 		WekaContainerModeEnvoy,
 		WekaContainerModeDist,
 		WekaContainerModeDriversDist,
+		WekaContainerModeDriversBuilder,
 		WekaContainerModeAdhocOpWC,
 		WekaContainerModeNfs,
 	}, w.Spec.Mode)
@@ -527,13 +565,14 @@ func (w *WekaContainer) GetNodeAffinity() NodeName {
 	return ""
 }
 
-func (w *WekaContainer) ToContainerDetails() *WekaContainerDetails {
-	return &WekaContainerDetails{
-		Image:           w.Spec.Image,
-		ImagePullSecret: w.Spec.ImagePullSecret,
-		Tolerations:     w.Spec.Tolerations,
-		Labels:          w.ObjectMeta.GetLabels(),
-		Affinity:        w.Spec.Affinity,
+func (w *WekaContainer) ToOwnerDetails() *WekaOwnerDetails {
+	return &WekaOwnerDetails{
+		Image:              w.Spec.Image,
+		ImagePullSecret:    w.Spec.ImagePullSecret,
+		Tolerations:        w.Spec.Tolerations,
+		Labels:             w.ObjectMeta.GetLabels(),
+		Affinity:           w.Spec.Affinity,
+		ServiceAccountName: w.Spec.ServiceAccountName,
 	}
 }
 
@@ -616,12 +655,13 @@ func (c *WekaContainer) DrivesRemoved() bool {
 	return meta.IsStatusConditionTrue(c.Status.Conditions, condition.CondContainerDrivesRemoved)
 }
 
-type WekaContainerDetails struct {
-	Image           string            `json:"image"`
-	ImagePullSecret string            `json:"imagePullSecrets"`
-	Tolerations     []v1.Toleration   `json:"tolerations,omitempty"`
-	Labels          map[string]string `json:"labels,omitempty"`
-	Affinity        *v1.Affinity      `json:"affinity,omitempty"`
+type WekaOwnerDetails struct {
+	Image              string            `json:"image"`
+	ImagePullSecret    string            `json:"imagePullSecrets"`
+	Tolerations        []v1.Toleration   `json:"tolerations,omitempty"`
+	Labels             map[string]string `json:"labels,omitempty"`
+	Affinity           *v1.Affinity      `json:"affinity,omitempty"`
+	ServiceAccountName string            `json:"serviceAccountName,omitempty"`
 }
 
 func (c *WekaContainerSpec) GetOverrides() *WekaContainerSpecOverrides {
