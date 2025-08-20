@@ -1,3 +1,51 @@
+# [1.26.0](https://github.com/weka/weka-k8s-api/compare/v1.25.0...v1.26.0) (2025-08-20)
+
+
+### Bug Fixes
+
+* add builder mode to IsWekaContainer, HasAgent functions ([7b63c5e](https://github.com/weka/weka-k8s-api/commit/7b63c5ec37814d122a25b5a3656f6e01ddd35e70))
+* add csi lables and tolerations addition support ([3f95820](https://github.com/weka/weka-k8s-api/commit/3f95820fa09da360f2ba4aebc26806df5e55807d))
+* add csi lables and tolerations to WekaContainerSpec ([db03bc4](https://github.com/weka/weka-k8s-api/commit/db03bc4a86eeabebaefb55f08ed66de89a4b0f6b))
+* add default Init wekacontainer status ([87dce95](https://github.com/weka/weka-k8s-api/commit/87dce954985d40c7d4550d2fad4558f4f9a7278a))
+* add distNodeSelector to specify location of dist service ([583d97e](https://github.com/weka/weka-k8s-api/commit/583d97e6029e9e5aa6be92fd35c7004d032616b8))
+* add equals func for ContainerAllocations ([20b00d9](https://github.com/weka/weka-k8s-api/commit/20b00d903e99d54d2f7ce067b99ab7f5125d9e5b))
+* add GetCsiConfig function for weka client ([6c04ad3](https://github.com/weka/weka-k8s-api/commit/6c04ad39d1f51ce7b4ebe694d48518c57c9eea90))
+* add GlobalPVC to client as well ([eb23b03](https://github.com/weka/weka-k8s-api/commit/eb23b0324d7666cd73c4ca93e79c6d26f7df5239))
+* add management ips selectors support ([e816103](https://github.com/weka/weka-k8s-api/commit/e8161031ef423c1b25832b13c5c758ff708dd561))
+* add network selector support ([3ef5fc5](https://github.com/weka/weka-k8s-api/commit/3ef5fc57d9cc74701c462d862614ac959486d674))
+* add overrides to disable dumper override ([12388c4](https://github.com/weka/weka-k8s-api/commit/12388c4c72efa7d0887f7f0befab9c0db8456d0f))
+* add vault auto configuration with encrypted default fss ([4c79bb1](https://github.com/weka/weka-k8s-api/commit/4c79bb15f5712fc37cee003234570f3b3517ed9f))
+* align wekaCluster csiConfig with wekaClient, use csiGroup instead of csiDriverName ([7778c02](https://github.com/weka/weka-k8s-api/commit/7778c021db33cfd262e9531fefea382c8de4ff42))
+* break out getCsiSecretName function ([13f7b11](https://github.com/weka/weka-k8s-api/commit/13f7b11ae8fe4252b95edeae146a029b7f77e4f7))
+* client pvc should be pvcconfig ref, not bool ([78b3a37](https://github.com/weka/weka-k8s-api/commit/78b3a375f3ff6ee58ce6f80c50a96c2ad32cd014))
+* correct reference to wekapolicy last result ([d033ac1](https://github.com/weka/weka-k8s-api/commit/d033ac18c74648135eb274390ef7c3e597a8074b))
+* csi: rename EnforceSecureHttps to EnforceTrustedHttps ([ab80797](https://github.com/weka/weka-k8s-api/commit/ab80797972464a2e7d844fb84e65c4bde06d6534))
+* csi: support skipping controller creation ([d1a2f5d](https://github.com/weka/weka-k8s-api/commit/d1a2f5d7fc2a496566ece58941d74fe31d5b75bd))
+* ensure nics generate ([200183d](https://github.com/weka/weka-k8s-api/commit/200183d432dbbe97e932a0446de89ccc4695a316))
+* generate deepcopy for TypedClientConfigs ([4729985](https://github.com/weka/weka-k8s-api/commit/47299854569cff85154ab70ebed7f6289e71f8f7))
+* generate missing part for driverDistPayload deep copy ([e7eb8c2](https://github.com/weka/weka-k8s-api/commit/e7eb8c2758095d6901ec65106e6ebe8615371c1a))
+* migrate from PVC procedure trigger ([5bafa31](https://github.com/weka/weka-k8s-api/commit/5bafa31d9ad45b2c9328ef60a7e7eaca84d62007))
+* remove fields; add client csiConfig ([46bd40f](https://github.com/weka/weka-k8s-api/commit/46bd40f0c8386ff06eb79cb865fc11cd90bb8c41))
+* remove ForRole funcs and add role functions on cluster level ([3851262](https://github.com/weka/weka-k8s-api/commit/38512620a25c6ba1cb8608a0e74d8724cd850b00))
+* remove join-ips from wide columns, it occupies too much space ([484045d](https://github.com/weka/weka-k8s-api/commit/484045dde0c44b10b148137dffcfd3791270d2f8))
+* remove typedConfig from weka container ([1c1c184](https://github.com/weka/weka-k8s-api/commit/1c1c184940d20c18b58184f3ed7d2f27d1003653))
+* reorder cluster and client csi config and add more csi configuration options ([7e5c017](https://github.com/weka/weka-k8s-api/commit/7e5c017f3e59855e892cdf97d368c5f5d2bd81d3))
+* support per-container pvc/global pvc on cluster, for mixed mode ([33bf956](https://github.com/weka/weka-k8s-api/commit/33bf9567ef6d67232d223798d987677938cc600f))
+* use pointers to distinguish empty value from not set ([4af7efb](https://github.com/weka/weka-k8s-api/commit/4af7efbea2a48862e40d5b8f03c0de12d9a0b2ce))
+* WekaContainerSpec TypedConfigs validation ([ff7ecf4](https://github.com/weka/weka-k8s-api/commit/ff7ecf44f08f34a16571df0863d347105dc171b5))
+
+
+### Features
+
+* add ensure nics to weka policy payload ([f014575](https://github.com/weka/weka-k8s-api/commit/f014575df3229af68d49abf225a81cfbfe4e7a86))
+* add fields for tracking csi state ([a6ea460](https://github.com/weka/weka-k8s-api/commit/a6ea460f28e02b30501f191ae478ff8e043300f1))
+* add filesystem metrics to wekacluster ([4e3137a](https://github.com/weka/weka-k8s-api/commit/4e3137a8971ebc46014d2801723c1728d48d34f4))
+* add gcp-all to sign payload ([390f04f](https://github.com/weka/weka-k8s-api/commit/390f04f865cbdf8b040bab24b5cb073b78661427))
+* add serviceAccountName to manual operation, policy and owner details ([573e641](https://github.com/weka/weka-k8s-api/commit/573e641d7d9cef18aad176619aae35f5ee033914))
+* allow setting per role annotations ([a531e38](https://github.com/weka/weka-k8s-api/commit/a531e38640730d51867c3c8f4e887d843561e7d6))
+* high-level drivers distribution service ([de9976d](https://github.com/weka/weka-k8s-api/commit/de9976d0f98de5a04c255f599b638e9544887905))
+* support coreIds for cluster ([43b26b2](https://github.com/weka/weka-k8s-api/commit/43b26b238a969da99efa6033c053817c53e3b5ac))
+
 # [1.25.0](https://github.com/weka/weka-k8s-api/compare/v1.24.0...v1.25.0) (2025-04-17)
 
 
