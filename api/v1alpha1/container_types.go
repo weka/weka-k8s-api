@@ -92,6 +92,7 @@ const (
 	WekaContainerModeS3             = "s3"
 	WekaContainerModeNfs            = "nfs"
 	WekaContainerModeEnvoy          = "envoy"
+	WekaContainerModeNodeAgent      = "node-agent"
 	WekaContainerModeAdhocOpWC      = "adhoc-op-with-container"
 	WekaContainerModeAdhocOp        = "adhoc-op"
 	PersistencePathBase             = "/opt/k8s-weka"
@@ -198,7 +199,7 @@ type WekaContainerSpec struct {
 	Image             string             `json:"image"`
 	ImagePullSecret   string             `json:"imagePullSecret,omitempty"`
 	WekaContainerName string             `json:"name"`
-	// +kubebuilder:validation:Enum=drive;compute;client;dist;drivers-dist;drivers-loader;drivers-builder;discovery;s3;adhoc-op-with-container;adhoc-op;envoy;nfs
+	// +kubebuilder:validation:Enum=drive;compute;client;dist;drivers-dist;drivers-loader;drivers-builder;discovery;s3;adhoc-op-with-container;adhoc-op;envoy;nfs;node-agent
 	Mode       string `json:"mode"`
 	NumCores   int    `json:"numCores"`             //numCores is weka-specific cores
 	ExtraCores int    `json:"extraCores,omitempty"` //extraCores is temporary solution for S3 containers, cores allocation on top of weka cores
@@ -476,6 +477,10 @@ func (w *WekaContainer) IsDiscoveryContainer() bool {
 
 func (w *WekaContainer) IsAdhocOpContainer() bool {
 	return slices.Contains([]string{WekaContainerModeAdhocOpWC, WekaContainerModeAdhocOp, WekaContainerModeDriversLoader}, w.Spec.Mode)
+}
+
+func (w *WekaContainer) IsNodeAgentContainer() bool {
+	return w.Spec.Mode == WekaContainerModeNodeAgent
 }
 
 func (w *WekaContainer) HasPersistentStorage() bool {
