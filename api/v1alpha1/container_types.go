@@ -470,6 +470,25 @@ func (w *WekaContainer) IsBackend() bool {
 	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeS3, WekaContainerModeNfs}, w.Spec.Mode)
 }
 
+func (w *WekaContainer) ShouldSkipNICsAllocation() bool {
+	if !w.IsBackend() && !w.IsClientContainer() {
+		return true
+	}
+
+	if w.Spec.Network.EthDevice != "" || len(w.Spec.Network.EthDevices) > 0 || len(w.Spec.Network.DeviceSubnets) > 0 {
+		return true
+	}
+
+	if w.IsMarkedForDeletion() {
+		return true
+	}
+
+	if w.Spec.Network.UdpMode {
+		return true
+	}
+	return false
+}
+
 func (w *WekaContainer) IsDiscoveryContainer() bool {
 	return w.Spec.Mode == WekaContainerModeDiscovery
 }
