@@ -127,7 +127,7 @@ type WekaClientSpec struct {
 	Network            Network           `json:"network,omitempty"`
 	DriversDistService string            `json:"driversDistService,omitempty"`
 	DriversLoaderImage string            `json:"driversLoaderImage,omitempty"`
-	DriversBuildId     string            `json:"driversBuildId,omitempty"`
+	DriversBuildId     *string           `json:"driversBuildId,omitempty"`
 	// if we want to specify a build id to be used when downloading/installing the drivers (in addition to the kernel detected by uname -r)
 	JoinIps       []string        `json:"joinIpPorts,omitempty"`
 	TargetCluster ObjectReference `json:"targetCluster,omitempty"`
