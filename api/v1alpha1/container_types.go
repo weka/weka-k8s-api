@@ -91,6 +91,8 @@ const (
 	WekaContainerModeDiscovery      = "discovery"
 	WekaContainerModeS3             = "s3"
 	WekaContainerModeNfs            = "nfs"
+	WekaContainerModeSmbw           = "smbw"
+	WekaContainerModeDataServices   = "data-services"
 	WekaContainerModeEnvoy          = "envoy"
 	WekaContainerModeAdhocOpWC      = "adhoc-op-with-container"
 	WekaContainerModeAdhocOp        = "adhoc-op"
@@ -198,7 +200,7 @@ type WekaContainerSpec struct {
 	Image             string             `json:"image"`
 	ImagePullSecret   string             `json:"imagePullSecret,omitempty"`
 	WekaContainerName string             `json:"name"`
-	// +kubebuilder:validation:Enum=drive;compute;client;dist;drivers-dist;drivers-loader;drivers-builder;discovery;s3;adhoc-op-with-container;adhoc-op;envoy;nfs
+	// +kubebuilder:validation:Enum=drive;compute;client;dist;drivers-dist;drivers-loader;drivers-builder;discovery;s3;adhoc-op-with-container;adhoc-op;envoy;nfs;smbw;telemetry;ssdproxy;data-services
 	Mode       string `json:"mode"`
 	NumCores   int    `json:"numCores"`             //numCores is weka-specific cores
 	ExtraCores int    `json:"extraCores,omitempty"` //extraCores is temporary solution for S3 containers, cores allocation on top of weka cores
@@ -498,7 +500,7 @@ func (w *WekaContainer) IsDriversBuilder() bool {
 }
 
 func (w *WekaContainer) IsBackend() bool {
-	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeS3, WekaContainerModeNfs}, w.Spec.Mode)
+	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeS3, WekaContainerModeNfs, WekaContainerModeSmbw, WekaContainerModeDataServices}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) IsDiscoveryContainer() bool {
@@ -519,6 +521,8 @@ func (w *WekaContainer) HasPersistentStorage() bool {
 		WekaContainerModeDist,
 		WekaContainerModeDriversDist,
 		WekaContainerModeNfs,
+		WekaContainerModeSmbw,
+		WekaContainerModeDataServices,
 	}, w.Spec.Mode)
 }
 
@@ -532,6 +536,10 @@ func (w *WekaContainer) IsS3Container() bool {
 
 func (w *WekaContainer) IsNfsContainer() bool {
 	return w.Spec.Mode == WekaContainerModeNfs
+}
+
+func (w *WekaContainer) IsDataServicesContainer() bool {
+	return w.Spec.Mode == WekaContainerModeDataServices
 }
 
 func (w *WekaContainer) HasJoinIps() bool {
@@ -557,11 +565,13 @@ func (w *WekaContainer) IsWekaContainer() bool {
 		WekaContainerModeDriversDist,
 		WekaContainerModeDriversBuilder,
 		WekaContainerModeNfs,
+		WekaContainerModeSmbw,
+		WekaContainerModeDataServices,
 	}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) IsAllocatable() bool {
-	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeEnvoy, WekaContainerModeS3, WekaContainerModeNfs}, w.Spec.Mode)
+	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeEnvoy, WekaContainerModeS3, WekaContainerModeNfs, WekaContainerModeSmbw, WekaContainerModeDataServices}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) MustHaveNodeAffinity() bool {
@@ -579,6 +589,8 @@ func (w *WekaContainer) HasAgent() bool {
 		WekaContainerModeDriversBuilder,
 		WekaContainerModeAdhocOpWC,
 		WekaContainerModeNfs,
+		WekaContainerModeSmbw,
+		WekaContainerModeDataServices,
 	}, w.Spec.Mode)
 }
 

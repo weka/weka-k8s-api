@@ -70,11 +70,25 @@ func boolPtrEqual(a, b *bool) bool {
 }
 
 type Network struct {
-	EthDevice  string   `json:"ethDevice,omitempty"`
+	// The name of a single network interface (for example, eth1) to be used by every backend container.
+	// This is for clusters that use only one dedicated NIC for the data path.
+	// You cannot use this field with ethDevices.
+	// If you leave this empty, the system automatically uses the node’s interface associated with the first subnet defined in deviceSubnets.
+	EthDevice string `json:"ethDevice,omitempty"`
+	// A list of network interface names to be used by backend containers when you have multiple dedicated NICs.
+	// The order of interfaces in this list is important, as it maps directly to the ethSlots index (the first interface maps to slot-0, the second to slot-1, and so on).
+	// You cannot use this field with ethDevice. Ensure that every interface listed here exists on all nodes that are part of the cluster.
 	EthDevices []string `json:"ethDevices,omitempty"`
-	Gateway    string   `json:"gateway,omitempty"`
-	UdpMode    bool     `json:"udpMode,omitempty"`
-	// subnet that is used for devices auto-discovery
+	// The default gateway IPv4 address for the backend containers’ data-path network.
+	// This is only necessary if backend subnets need to communicate with destinations outside of their local network (L2 segment).
+	// If you have a flat, non-routed backend network, you can leave this field empty.
+	Gateway string `json:"gateway,omitempty"`
+	// A setting that enables or disables UDP encapsulation for backend traffic.
+	// - false (default): Uses standard raw Ethernet frames. true: Wraps data-path traffic in UDP packets.
+	// This is required if your network infrastructure or CNI (Container Network Interface) blocks traffic that isn’t IP-based.
+	UdpMode bool `json:"udpMode,omitempty"`
+	// A list of backend subnets in CIDR notation (for example, 192.168.10.0/24).
+	// The operator assigns IP addresses from these subnets to the backend containers for their data path network
 	// +kubebuilder:validation:items:Pattern="^([0-9]{1,3}\\.){3}[0-9]{1,3}\\/[0-9]{1,2}$"
 	DeviceSubnets          []string          `json:"deviceSubnets,omitempty"`
 	Selectors              []NetworkSelector `json:"selectors,omitempty"`
@@ -141,11 +155,13 @@ func (n *Network) Equal(o *Network) bool {
 }
 
 type AdditionalMemory struct {
-	Compute int `json:"compute,omitempty"`
-	Drive   int `json:"drive,omitempty"`
-	S3      int `json:"s3,omitempty"`
-	Nfs     int `json:"nfs,omitempty"`
-	Envoy   int `json:"envoy,omitempty"`
+	Compute      int `json:"compute,omitempty"`
+	Drive        int `json:"drive,omitempty"`
+	S3           int `json:"s3,omitempty"`
+	Nfs          int `json:"nfs,omitempty"`
+	Envoy        int `json:"envoy,omitempty"`
+	Smbw         int `json:"smbw,omitempty"`
+	DataServices int `json:"dataServices,omitempty"`
 }
 
 func (a *AdditionalMemory) GetForMode(mode string) int {
@@ -159,12 +175,23 @@ func (a *AdditionalMemory) GetForMode(mode string) int {
 		additionalMemory = a.S3
 	case WekaContainerModeNfs:
 		additionalMemory = a.Nfs
+	case WekaContainerModeDataServices:
+		additionalMemory = a.DataServices
 	case WekaContainerModeEnvoy:
 		additionalMemory = a.Envoy
+	case WekaContainerModeSmbw:
+		additionalMemory = a.Smbw
 	}
 	return additionalMemory
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.driveCapacity) || self.driveCapacity == 0 || !has(self.driveTypesRatio)",message="driveCapacity and driveTypesRatio are mutually exclusive; use driveCapacity for TLC-only mode, or containerCapacity with driveTypesRatio for mixed drive types"
+// +kubebuilder:validation:XValidation:rule="!has(self.driveCapacity) || self.driveCapacity == 0 || !has(self.numDrives) || self.numDrives == 0 || self.numDrives >= self.driveCores",message="numDrives must be >= driveCores when using driveCapacity (TLC-only mode); each drive core requires at least one virtual drive"
+// +kubebuilder:validation:XValidation:rule="!has(self.numDrives) || self.numDrives == 0 || !has(self.containerCapacity) || self.containerCapacity == 0",message="numDrives and containerCapacity are mutually exclusive; use numDrives with driveCapacity for TLC-only mode, or containerCapacity with driveTypesRatio for mixed drive types"
+// +kubebuilder:validation:XValidation:rule="!has(self.containerCapacity) || self.containerCapacity > 0",message="containerCapacity must be greater than 0 when specified"
+// +kubebuilder:validation:XValidation:rule="!has(self.driveTypesRatio) || self.driveTypesRatio.tlc > 0 || self.driveTypesRatio.qlc > 0",message="at least one of driveTypesRatio.tlc or driveTypesRatio.qlc must be greater than 0"
+// +kubebuilder:validation:XValidation:rule="!has(self.driveTypesRatio) || self.driveTypesRatio.tlc > 0",message="driveTypesRatio.tlc must be greater than 0 when driveTypesRatio is specified; TLC-only and mixed TLC/QLC configurations are supported, but QLC-only is not allowed"
+// +kubebuilder:validation:XValidation:rule="!has(self.driveCapacity) || self.driveCapacity > 0",message="driveCapacity must be greater than 0 when specified"
 type WekaConfig struct {
 	ComputeContainers         *int `json:"computeContainers,omitempty"`
 	DriveContainers           *int `json:"driveContainers,omitempty"`
@@ -193,6 +220,57 @@ type WekaConfig struct {
 	NfsFrontendHugepages int `json:"nfsFrontendHugepages,omitempty"`
 	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage offset for NFS frontend
 	NfsFrontendHugepagesOffset int `json:"nfsFrontendHugepagesOffset,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: number of SMB-W containers (3-8)
+	SmbwContainers int `json:"smbwContainers,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: number of SMB-W cores per container
+	SmbwCores int `json:"smbwCores,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: number of SMB-W extra cores per container
+	SmbwExtraCores int `json:"smbwExtraCores,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage allocation for SMB-W frontend
+	SmbwFrontendHugepages int `json:"smbwFrontendHugepages,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage offset for SMB-W frontend
+	SmbwFrontendHugepagesOffset int `json:"smbwFrontendHugepagesOffset,omitempty"`
+	// DriveCapacity is the capacity in GiB to allocate per single virtual drive.
+	// NumDrives multiplied by DriveCapacity gives the total capacity requested by each drive container.
+	// This value determines how much capacity each container receives from shared drives.
+	DriveCapacity int `json:"driveCapacity,omitempty"`
+	// ContainerCapacity specifies the total capacity (in GiB) requested by each container when using shared drives via SSD proxy.
+	// This value takes precedence over DriveCapacity when both are set. It allows more flexible capacity allocation.
+	ContainerCapacity int `json:"containerCapacity,omitempty"`
+	// DriveTypesRatio specifies the desired ratio of drive types (TLC vs QLC) when allocating drives for the cluster.
+	DriveTypesRatio *DriveTypesRatio `json:"driveTypesRatio,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: number of data services containers
+	DataServicesContainers int `json:"dataServicesContainers,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: number of data services cores per container
+	DataServicesCores int `json:"dataServicesCores,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: number of data services extra cores per container
+	DataServicesExtraCores int `json:"dataServicesExtraCores,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage allocation for data services frontend
+	DataServicesHugepages int `json:"dataServicesHugepages,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage offset for data services frontend
+	DataServicesHugepagesOffset int `json:"dataServicesHugepagesOffset,omitempty"`
+}
+
+type DriveTypesRatio struct {
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default=0
+	Tlc int `json:"tlc"`
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default=0
+	Qlc int `json:"qlc"`
+}
+
+// GetTlcQlcCapacity splits total capacity into TLC and QLC based on the ratio.
+// Remainder goes to QLC to avoid rounding loss.
+// Returns all capacity as TLC if ratio is nil or both values are zero.
+func GetTlcQlcCapacity(totalCapacity int, ratio *DriveTypesRatio) (tlc, qlc int) {
+	if ratio == nil || ratio.Tlc+ratio.Qlc == 0 {
+		return totalCapacity, 0 // All TLC by default
+	}
+	totalParts := ratio.Tlc + ratio.Qlc
+	tlc = (totalCapacity * ratio.Tlc) / totalParts
+	qlc = totalCapacity - tlc // Remainder goes to QLC to avoid rounding loss
+	return
 }
 
 type WekaHomeConfig struct {
@@ -211,6 +289,10 @@ type RoleNodeSelector struct {
 	S3 *map[string]string `json:"s3,omitempty"`
 	// nodeSelector for nfs weka containers
 	Nfs *map[string]string `json:"nfs,omitempty"`
+	// nodeSelector for smbw weka containers
+	Smbw *map[string]string `json:"smbw,omitempty"`
+	// nodeSelector for data services weka containers
+	DataServices *map[string]string `json:"dataServices,omitempty"`
 }
 
 type RoleAnnotations struct {
@@ -222,6 +304,10 @@ type RoleAnnotations struct {
 	S3 *map[string]string `json:"s3,omitempty"`
 	// annotations for nfs weka containers
 	Nfs *map[string]string `json:"nfs,omitempty"`
+	// annotations for smbw weka containers
+	Smbw *map[string]string `json:"smbw,omitempty"`
+	// annotations for data services weka containers
+	DataServices *map[string]string `json:"dataServices,omitempty"`
 }
 
 type RoleNetworkSelector struct {
@@ -233,6 +319,10 @@ type RoleNetworkSelector struct {
 	S3 *Network `json:"s3,omitempty"`
 	// network selector for nfs weka containers
 	Nfs *Network `json:"nfs,omitempty"`
+	// network selector for smbw weka containers
+	Smbw *Network `json:"smbw,omitempty"`
+	// network selector for data services weka containers
+	DataServices *Network `json:"dataServices,omitempty"`
 }
 
 // RoleCoreIds defines CPU core id lists per container role for Manual CPU policy.
@@ -250,6 +340,10 @@ type RoleCoreIds struct {
 	S3 []int `json:"s3,omitempty"`
 	// +kubebuilder:validation:Optional
 	Nfs []int `json:"nfs,omitempty"`
+	// +kubebuilder:validation:Optional
+	Smbw []int `json:"smbw,omitempty"`
+	// +kubebuilder:validation:Optional
+	DataServices []int `json:"dataServices,omitempty"`
 }
 
 type RoleTopologySpreadConstraints struct {
@@ -257,6 +351,7 @@ type RoleTopologySpreadConstraints struct {
 	Drive   []v1.TopologySpreadConstraint `json:"drive,omitempty"`
 	S3      []v1.TopologySpreadConstraint `json:"s3,omitempty"`
 	Nfs     []v1.TopologySpreadConstraint `json:"nfs,omitempty"`
+	Smbw    []v1.TopologySpreadConstraint `json:"smbw,omitempty"`
 }
 
 func (c *RoleTopologySpreadConstraints) ForRole(role string) []v1.TopologySpreadConstraint {
@@ -269,6 +364,8 @@ func (c *RoleTopologySpreadConstraints) ForRole(role string) []v1.TopologySpread
 		return c.S3
 	case "nfs":
 		return c.Nfs
+	case "smbw":
+		return c.Smbw
 	default:
 		return nil
 	}
@@ -279,6 +376,7 @@ type RoleAffinity struct {
 	Drive   *v1.Affinity `json:"drive,omitempty"`
 	S3      *v1.Affinity `json:"s3,omitempty"`
 	Nfs     *v1.Affinity `json:"nfs,omitempty"`
+	Smbw    *v1.Affinity `json:"smbw,omitempty"`
 }
 
 type PodConfiguration struct {
@@ -353,6 +451,7 @@ type EncryptionConfig struct {
 	InternalConfig *InternalEncryptionConfig `json:"internal,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.interfaces) || self.interfaces.size() <= 1",message="NFS allows only 1 interface per host"
 type NfsConfig struct {
 	Interfaces []string `json:"interfaces,omitempty"`
 	IpRanges   []string `json:"ipRanges,omitempty"`
@@ -363,6 +462,58 @@ type S3Config struct {
 	// Useful for settings such as: `--envoy-max-requests 1150 --envoy-max-connections 1300 --envoy-max-pending-requests 1450`
 	// Not propagated to already created cluster, and direct weka control should be used for that
 	ClusterCreateArgs []string `json:"clusterCreateArgs,omitempty"`
+}
+
+type SmbwConfig struct {
+	// ClusterName is the SMB-W cluster name, defaults to "default"
+	ClusterName string `json:"clusterName,omitempty"`
+	// DomainName is the domain name for SMB-W, required for SMB-W cluster creation
+	DomainName       string `json:"domainName"`
+	DomainJoinSecret string `json:"domainJoinSecret"`
+	UserName         string `json:"userName,omitempty"`
+	// IpRanges specifies floating IP ranges for SMB-W high availability
+	IpRanges []string `json:"ipRanges,omitempty"`
+}
+
+// TelemetryConfig defines the telemetry export configuration for the Weka cluster
+type TelemetryConfig struct {
+	// List of telemetry exports to configure
+	Exports []TelemetryExport `json:"exports,omitempty"`
+}
+
+// TelemetryExport defines a single telemetry export destination
+type TelemetryExport struct {
+	// Name is the unique identifier for this export
+	Name string `json:"name"`
+	// Sources specifies which telemetry sources to export (e.g., "audit")
+	Sources []string `json:"sources"`
+	// Splunk configuration for Splunk HEC export
+	Splunk *SplunkExportConfig `json:"splunk,omitempty"`
+	// Future: S3 *S3ExportConfig `json:"s3,omitempty"`
+	// Future: Kafka *KafkaExportConfig `json:"kafka,omitempty"`
+}
+
+// SplunkExportConfig defines Splunk-specific export configuration
+type SplunkExportConfig struct {
+	// AuthTokenSecretRef references a secret containing the Splunk HEC authentication token.
+	// Format: "secretName.keyName" where secretName is the name of the secret in the same namespace
+	// and keyName is the key within the secret's data that contains the token.
+	AuthTokenSecretRef string `json:"authTokenSecretRef"`
+	// Endpoint is the Splunk HEC endpoint URL (maps to --target in weka CLI)
+	Endpoint string `json:"endpoint"`
+	// CACertSecretRef optionally references a secret containing a user-provided CA certificate PEM file.
+	// Format: "secretName.keyName" where secretName is the name of the secret in the same namespace
+	// and keyName is the key within the secret's data that contains the certificate.
+	// Maps to --ca-cert in weka CLI. Empty string is treated same as nil (de-configures if was configured).
+	// Mutually exclusive with VerifyWithClusterCACert.
+	CACertSecretRef *string `json:"caCertSecretRef,omitempty"`
+	// AllowUnverifiedCertificate allows accessing without verifying the target certificate.
+	// Maps to --allow-unverified-certificate in weka CLI.
+	AllowUnverifiedCertificate bool `json:"allowUnverifiedCertificate,omitempty"`
+	// VerifyWithClusterCACert uses the Weka cluster's internal CA certificate to verify.
+	// Maps to --verify-with-cluster-cacert in weka CLI.
+	// Mutually exclusive with CACertSecretRef.
+	VerifyWithClusterCACert bool `json:"verifyWithClusterCACert,omitempty"`
 }
 
 // WekaClusterSpec defines the desired state of WekaCluster
@@ -465,6 +616,9 @@ type WekaClusterSpec struct {
 	Encryption  *EncryptionConfig `json:"encryption,omitempty"`
 	NFSConfig   *NfsConfig        `json:"nfs,omitempty"`
 	S3Config    *S3Config         `json:"s3,omitempty"`
+	SmbwConfig  *SmbwConfig       `json:"smbw,omitempty"`
+	// Telemetry configuration for exporting audit logs and other telemetry data
+	Telemetry *TelemetryConfig `json:"telemetry,omitempty"`
 }
 
 func (c *WekaClusterSpec) GetOverrides() *WekaClusterSpecOverrides {
@@ -489,7 +643,8 @@ type PVCConfig struct {
 }
 
 type WekaClusterSpecOverrides struct {
-	AllowS3ClusterDestroy bool `json:"allowS3ClusterDestroy,omitempty"`
+	AllowS3ClusterDestroy   bool `json:"allowS3ClusterDestroy,omitempty"`
+	AllowSmbwClusterDestroy bool `json:"allowSmbwClusterDestroy,omitempty"`
 	// disregard redundancy constraints, useful for testing, should not be used in production as misaligns failure domains
 	DisregardRedundancy bool `json:"disregardRedundancy,omitempty"`
 	// can be used to specify a build_id for a driver in the distributor service, keep empty for auto detection default
@@ -679,6 +834,10 @@ func (c *WekaCluster) GetNodeSelectorForRole(role string) map[string]string {
 		roleNodeSelector = c.Spec.RoleNodeSelector.S3
 	case "nfs":
 		roleNodeSelector = c.Spec.RoleNodeSelector.Nfs
+	case "smbw":
+		roleNodeSelector = c.Spec.RoleNodeSelector.Smbw
+	case "data-services":
+		roleNodeSelector = c.Spec.RoleNodeSelector.DataServices
 	}
 
 	if roleNodeSelector != nil {
@@ -701,6 +860,10 @@ func (c *WekaCluster) GetAnnotationsForRole(role string) map[string]string {
 		roleAnnotations = c.Spec.RoleAnnotations.S3
 	case "nfs":
 		roleAnnotations = c.Spec.RoleAnnotations.Nfs
+	case "smbw":
+		roleAnnotations = c.Spec.RoleAnnotations.Smbw
+	case "data-services":
+		roleAnnotations = c.Spec.RoleAnnotations.DataServices
 	}
 
 	if roleAnnotations != nil {
@@ -723,6 +886,10 @@ func (c *WekaCluster) GetNetworkForRole(role string) Network {
 		roleNetworkSelector = c.Spec.RoleNetworkSelector.S3
 	case "nfs":
 		roleNetworkSelector = c.Spec.RoleNetworkSelector.Nfs
+	case "smbw":
+		roleNetworkSelector = c.Spec.RoleNetworkSelector.Smbw
+	case "data-services":
+		roleNetworkSelector = c.Spec.RoleNetworkSelector.DataServices
 	}
 
 	if roleNetworkSelector != nil {
@@ -743,6 +910,10 @@ func (c *WekaCluster) GetCoreIdsForRole(role string) []int {
 		return c.Spec.RoleCoreIds.S3
 	case "nfs":
 		return c.Spec.RoleCoreIds.Nfs
+	case "smbw":
+		return c.Spec.RoleCoreIds.Smbw
+	case "data-services":
+		return c.Spec.RoleCoreIds.DataServices
 	default:
 		return nil
 	}
@@ -769,6 +940,8 @@ func (c *WekaCluster) GetAffinityForRole(role string) *v1.Affinity {
 		affinity = c.Spec.PodConfig.RoleAffinity.S3
 	case "nfs":
 		affinity = c.Spec.PodConfig.RoleAffinity.Nfs
+	case "smbw":
+		affinity = c.Spec.PodConfig.RoleAffinity.Smbw
 	}
 
 	if affinity != nil {
