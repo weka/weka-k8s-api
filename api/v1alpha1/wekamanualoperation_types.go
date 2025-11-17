@@ -86,6 +86,11 @@ type EnsureNICsPayload struct {
 	DataNICsNumber int               `json:"dataNICsNumber,omitempty"`
 }
 
+type SignDrivesExclusions struct {
+	DevicePaths   []string `json:"devicePaths,omitempty"`
+	DeviceSerials []string `json:"deviceSerials,omitempty"`
+}
+
 type SignDrivesPayload struct {
 	// +kubebuilder:validation:Enum=aws-all;gcp-all;device-identifiers;device-paths;all-not-root
 	Type         string            `json:"type"`
@@ -105,6 +110,8 @@ type SignDrivesPayload struct {
 	//    ```
 	PCIDevices  *PCIDevices  `json:"pciDevices,omitempty"`
 	SignOptions *SignOptions `json:"options,omitempty"`
+	// Specifies drives to exclude from signing
+	Exclusions *SignDrivesExclusions `json:"exclusions,omitempty"`
 }
 
 type SignOptions struct {
