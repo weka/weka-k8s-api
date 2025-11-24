@@ -147,6 +147,18 @@ func (a *AdditionalMemory) GetForMode(mode string) int {
 	return additionalMemory
 }
 
+// DriveSharingConfig configures multi-tenant drive sharing via SSD proxy
+type DriveSharingConfig struct {
+	// Enabled enables drive sharing mode for this cluster
+	Enabled bool `json:"enabled"`
+
+	// DriveSize is the capacity in GiB to allocate per virtual drive.
+	// Minimum: 1024 GiB (1 TiB).
+	// This value determines how much capacity each container receives from shared drives.
+	// +kubebuilder:validation:Minimum=1024
+	DriveSize int `json:"driveSize"`
+}
+
 type WekaConfig struct {
 	ComputeContainers         *int `json:"computeContainers,omitempty"`
 	DriveContainers           *int `json:"driveContainers,omitempty"`
@@ -384,6 +396,8 @@ type WekaClusterSpec struct {
 	ExpandEndpoints []string `json:"expandEndpoints,omitempty"`
 	// weka cluster topology configuration
 	Dynamic *WekaConfig `json:"dynamicTemplate,omitempty"`
+	// Drive sharing configuration for multi-tenant environments
+	DriveSharing *DriveSharingConfig `json:"driveSharing,omitempty"`
 	// weka cluster network configuration
 	Network Network `json:"network,omitempty"`
 	// A hot spare is reserved capacity designed to handle data rebuilds while maintaining the system's net capacity, even in the event of failure domains being lost
