@@ -210,16 +210,18 @@ type WekaContainerSpec struct {
 	CoreIds    []int  `json:"coreIds,omitempty"`
 	// +kubebuilder:validation:Enum=auto;shared;dedicated;dedicated_ht;manual
 	// +kubebuilder:default=auto
-	CpuPolicy             CpuPolicy            `json:"cpuPolicy,omitempty"`
-	Network               Network              `json:"network,omitempty"`
-	Hugepages             int                  `json:"hugepages,omitempty"`
-	HugepagesOffset       int                  `json:"hugepagesOffset,omitempty"`
-	HugepagesSize         string               `json:"hugepagesSize,omitempty"`
-	HugepagesOverride     string               `json:"hugepagesSizeOverride,omitempty"`
-	NumDrives             int                  `json:"numDrives,omitempty"`
-	DriversDistService    string               `json:"driversDistService,omitempty"`
-	DriversLoaderImage    string               `json:"driversLoaderImage,omitempty"`
-	DriversBuildId        *string              `json:"driversBuildId,omitempty"`
+	CpuPolicy          CpuPolicy `json:"cpuPolicy,omitempty"`
+	Network            Network   `json:"network,omitempty"`
+	Hugepages          int       `json:"hugepages,omitempty"`
+	HugepagesOffset    int       `json:"hugepagesOffset,omitempty"`
+	HugepagesSize      string    `json:"hugepagesSize,omitempty"`
+	HugepagesOverride  string    `json:"hugepagesSizeOverride,omitempty"`
+	NumDrives          int       `json:"numDrives,omitempty"`
+	DriversDistService string    `json:"driversDistService,omitempty"`
+	DriversLoaderImage string    `json:"driversLoaderImage,omitempty"`
+	DriversBuildId     *string   `json:"driversBuildId,omitempty"`
+	// Version specifies the weka version to build for (driver-builder mode)
+	Version               string               `json:"version,omitempty"`
 	WekaSecretRef         v1.EnvVarSource      `json:"wekaSecretRef,omitempty"`
 	JoinIps               []string             `json:"joinIpPorts,omitempty"`
 	TracesConfiguration   *TracesConfiguration `json:"tracesConfiguration,omitempty"`
