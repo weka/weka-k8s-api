@@ -7,7 +7,7 @@ import (
 
 // WekaManualOperationSpec defines the desired state of WekaManualOperation
 type WekaManualOperationSpec struct {
-	// +kubebuilder:validation:Enum=sign-drives;discover-drives;force-resign-drives;block-drives;unblock-drives;ensure-nics;remote-traces-session
+	// +kubebuilder:validation:Enum=sign-drives;discover-drives;force-resign-drives;block-drives;unblock-drives;ensure-nics;remote-traces-session;prepull-image
 	Action             string                `json:"action"`
 	Payload            ManualOperatorPayload `json:"payload"`
 	Image              *string               `json:"image,omitempty"`
@@ -61,6 +61,27 @@ type ManualOperatorPayload struct {
 	EnsureNICs                *EnsureNICsPayload         `json:"ensureNICsPayload,omitempty"`
 	ForceResignDrives         *ForceResignDrivesPayload  `json:"forceResignDrivesPayload,omitempty"`
 	RemoteTracesSessionConfig *RemoteTracesSessionConfig `json:"remoteTracesSessionPayload,omitempty"`
+	PrePullImage              *PrePullImagePayload       `json:"prePullImagePayload,omitempty"`
+}
+
+// PrePullImagePayload defines the parameters for the prepull-image operation
+type PrePullImagePayload struct {
+	// TargetImage is the container image to pre-pull on nodes
+	TargetImage string `json:"targetImage"`
+	// NodeSelector filters which nodes to pre-pull on (applied with OR logic if multiple selectors)
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Tolerations for the pre-pull pods
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+	// ImagePullSecret for private registries
+	ImagePullSecret string `json:"imagePullSecret,omitempty"`
+	// Timeout for the pre-pull operation (defaults to 10m)
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^(0|([0-9]+(\\.[0-9]+)?(s|m|h))+)$"
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// ClusterRef references a WekaCluster to inherit nodeSelector/tolerations (optional)
+	ClusterRef *ObjectReference `json:"clusterRef,omitempty"`
+	// ClientRef references a WekaClient to inherit nodeSelector/tolerations (optional)
+	ClientRef *ObjectReference `json:"clientRef,omitempty"`
 }
 
 type PCIDevices struct {
