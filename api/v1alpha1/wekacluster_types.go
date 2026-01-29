@@ -358,6 +358,13 @@ type NfsConfig struct {
 	IpRanges   []string `json:"ipRanges,omitempty"`
 }
 
+type S3Config struct {
+	// No overlap validation, only appended to the cluster create command as-is
+	// Useful for settings such as: `--envoy-max-requests 1150 --envoy-max-connections 1300 --envoy-max-pending-requests 1450`
+	// Not propagated to already created cluster, and direct weka control should be used for that
+	ClusterCreateArgs []string `json:"clusterCreateArgs,omitempty"`
+}
+
 // WekaClusterSpec defines the desired state of WekaCluster
 type WekaClusterSpec struct {
 	// A template/strategy of how to build a cluster, right now only "dynamic" supported, explicitly specifying config of a cluster
@@ -457,6 +464,7 @@ type WekaClusterSpec struct {
 	RoleCoreIds RoleCoreIds       `json:"roleCoreIds,omitempty"`
 	Encryption  *EncryptionConfig `json:"encryption,omitempty"`
 	NFSConfig   *NfsConfig        `json:"nfs,omitempty"`
+	S3Config    *S3Config         `json:"s3,omitempty"`
 }
 
 func (c *WekaClusterSpec) GetOverrides() *WekaClusterSpecOverrides {
