@@ -245,10 +245,12 @@ type WekaConfig struct {
 	DataServicesCores int `json:"dataServicesCores,omitempty"`
 	// EXPERIMENTAL, ALPHA STATE, should not be used in production: number of data services extra cores per container
 	DataServicesExtraCores int `json:"dataServicesExtraCores,omitempty"`
-	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage allocation for data services frontend
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage allocation for data services containers
 	DataServicesHugepages int `json:"dataServicesHugepages,omitempty"`
-	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage offset for data services frontend
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: hugepage offset for data services containers
 	DataServicesHugepagesOffset int `json:"dataServicesHugepagesOffset,omitempty"`
+	// EXPERIMENTAL, ALPHA STATE, should not be used in production: resource limits/requests for data services containers
+	DataServicesResources *PodResourcesSpec `json:"dataServicesResources,omitempty"`
 }
 
 type DriveTypesRatio struct {
