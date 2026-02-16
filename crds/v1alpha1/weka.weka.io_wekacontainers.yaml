@@ -1336,6 +1336,11 @@ spec:
                       on removal of drive container we will not be able to reuse them,
                       and manual operation with force resign will be required
                     type: boolean
+                  skipVirtualDrivesRemoval:
+                    description: |-
+                      skips removal of virtual drives from ssdproxy - unsafe operation that can lead to virtual drives leftovers
+                      should not be used unless instructed explicitly by weka personnel
+                    type: boolean
                   umountOnHost:
                     description: unsafe operation, runs nsenter in root namespace
                       to umount all wekafs mounts visible on host
@@ -1813,6 +1818,12 @@ spec:
               allocations:
                 properties:
                   agentPort:
+                    type: integer
+                  dpdkBaseMemoryMb:
+                    description: |-
+                      DpdkBaseMemoryMb specifies the base memory in MB for DPDK operations.
+                      Set to 64 for frontend containers (client, s3, nfs, smbw, data-services-fe modes).
+                      For non-frontend containers, this field is omitted from JSON.
                     type: integer
                   drives:
                     items:

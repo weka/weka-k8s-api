@@ -306,6 +306,10 @@ type ContainerAllocations struct {
 	// VirtualDrives contains virtual drive allocations for drive sharing mode.
 	// Each VirtualDrive maps a virtual UUID to a physical drive UUID with allocated capacity.
 	VirtualDrives []VirtualDrive `json:"virtualDrives,omitempty"`
+	// DpdkBaseMemoryMb specifies the base memory in MB for DPDK operations.
+	// Set to 64 for frontend containers (client, s3, nfs, smbw, data-services-fe modes).
+	// For non-frontend containers, this field is omitted from JSON.
+	DpdkBaseMemoryMb int `json:"dpdkBaseMemoryMb,omitempty"`
 }
 
 func (c *ContainerAllocations) Equals(other *ContainerAllocations) bool {
@@ -341,6 +345,9 @@ func (c *ContainerAllocations) Equals(other *ContainerAllocations) bool {
 			c.VirtualDrives[i].Serial != other.VirtualDrives[i].Serial {
 			return false
 		}
+	}
+	if c.DpdkBaseMemoryMb != other.DpdkBaseMemoryMb {
+		return false
 	}
 	return true
 }

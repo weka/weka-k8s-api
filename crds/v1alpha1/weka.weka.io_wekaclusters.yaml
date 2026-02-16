@@ -314,24 +314,14 @@ spec:
                   envoyCores:
                     type: integer
                   nfsContainers:
-                    description: 'EXPERIMENTAL, ALPHA STATE, should not be used in
-                      production: number of NFS containers'
                     type: integer
                   nfsCores:
-                    description: 'EXPERIMENTAL, ALPHA STATE, should not be used in
-                      production: number of NFS cores per container'
                     type: integer
                   nfsExtraCores:
-                    description: 'EXPERIMENTAL, ALPHA STATE, should not be used in
-                      production: number of NFS extra cores per container'
                     type: integer
                   nfsFrontendHugepages:
-                    description: 'EXPERIMENTAL, ALPHA STATE, should not be used in
-                      production: hugepage allocation for NFS frontend'
                     type: integer
                   nfsFrontendHugepagesOffset:
-                    description: 'EXPERIMENTAL, ALPHA STATE, should not be used in
-                      production: hugepage offset for NFS frontend'
                     type: integer
                   numDrives:
                     type: integer
