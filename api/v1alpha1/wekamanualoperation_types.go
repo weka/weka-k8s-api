@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // WekaManualOperationSpec defines the desired state of WekaManualOperation
@@ -61,6 +62,7 @@ type ManualOperatorPayload struct {
 	EnsureNICs                *EnsureNICsPayload         `json:"ensureNICsPayload,omitempty"`
 	ForceResignDrives         *ForceResignDrivesPayload  `json:"forceResignDrivesPayload,omitempty"`
 	RemoteTracesSessionConfig *RemoteTracesSessionConfig `json:"remoteTracesSessionPayload,omitempty"`
+	RotatePods                *RotatePodsPayload         `json:"rotatePodsPayload,omitempty"`
 }
 
 type PCIDevices struct {
@@ -151,6 +153,14 @@ type RemoteTracesSessionConfig struct {
 	AllowHttpWekahomeEndpoint     bool            `json:"allowHttpWekahomeEndpoint,omitempty"`
 	AllowInsecureWekahomeEndpoint bool            `json:"allowInsecureWekahomeEndpoint,omitempty"`
 	WekahomeCaSecret              string          `json:"wekahomeCaSecret,omitempty"`
+}
+
+type RotatePodsPayload struct {
+	// Cluster is the namespaced name of the WekaCluster or WekaClient whose pods to rotate.
+	Cluster types.NamespacedName `json:"cluster"`
+	// CRType is the type of the CR to rotate pods for (WekaCluster or WekaClient).
+	// +kubebuilder:validation:Enum=WekaCluster;WekaClient
+	CRType string `json:"crType"`
 }
 
 func init() {
