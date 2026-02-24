@@ -55,6 +55,7 @@ type ManualOperatorPayload struct {
 	EnsureNICs                *EnsureNICsPayload         `json:"ensureNICsPayload,omitempty"`
 	ForceResignDrives         *ForceResignDrivesPayload  `json:"forceResignDrivesPayload,omitempty"`
 	RemoteTracesSessionConfig *RemoteTracesSessionConfig `json:"remoteTracesSessionPayload,omitempty"`
+	RotatePods                *RotatePodsPayload         `json:"rotatePodsPayload,omitempty"`
 }
 
 type PCIDevices struct {
@@ -131,6 +132,11 @@ type RemoteTracesSessionConfig struct {
 	AllowHttpWekahomeEndpoint     bool              `json:"allowHttpWekahomeEndpoint,omitempty"`
 	AllowInsecureWekahomeEndpoint bool              `json:"allowInsecureWekahomeEndpoint,omitempty"`
 	WekahomeCaSecret              string            `json:"wekahomeCaSecret,omitempty"`
+}
+
+type RotatePodsPayload struct {
+	// ClusterName is the name of the WekaCluster or WekaClient whose pods to rotate.
+	ClusterName string `json:"clusterName"`
 }
 
 func init() {
