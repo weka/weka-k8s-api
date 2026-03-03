@@ -101,6 +101,10 @@ type DriverDistPayload struct {
 	// DistNodeSelector is the node selector for the drivers distribution (dist) container.
 	// If not specified, the dist container will be scheduled on any available node.
 	DistNodeSelector map[string]string `json:"distNodeSelector,omitempty"`
+	// NumCores sets the number of cores for driver builder containers (compilation is CPU-intensive).
+	// Defaults to 1 if not set.
+	// +optional
+	NumCores int `json:"numCores,omitempty"`
 }
 
 func init() {
