@@ -41,6 +41,7 @@ const (
 	CondSmbwDomainJoined             = "SmbwDomainJoined"
 	CondJoinedSmbwCluster            = "JoinedSmbwCluster"
 	CondRemovedFromSmbw              = "RemovedFromSmbw"
+	CondSmbwRemovalInProgress        = "SmbwRemovalInProgress"
 	CondS3ClusterDestroyed           = "S3ClusterDestroyed"
 	CondContainerAffinitySet         = "ContainerAffinitySet"
 	CondContainerImageUpdated        = "ContainerImageUpdated"
