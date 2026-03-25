@@ -1304,6 +1304,11 @@ spec:
                     description: DebugSleepOnTerminate specifies the number of seconds
                       to sleep on container abnormal exit for debugging purposes
                     type: integer
+                  dpdkBaseMemoryMbPerCore:
+                    description: |-
+                      DpdkBaseMemoryMbPerCore specifies the DPDK base memory in MB per core for frontend containers (client, s3, nfs)
+                      If set, total memory will be this value * NumCores. If not set, no dpdk_base_memory_mb will be configured
+                    type: integer
                   forceDrain:
                     description: unsafe operation, forces drain on the node where
                       the container is running, should not be used unless instructed
@@ -1820,7 +1825,6 @@ spec:
                   - added_time
                   - device_path
                   - serial_number
-                  - size_bytes
                   - status
                   - uuid
                   type: object

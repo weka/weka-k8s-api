@@ -1626,6 +1626,12 @@ spec:
                       type: object
                     type: array
                 type: object
+              template:
+                default: dynamic
+                description: A template/strategy of how to build a cluster, right
+                  now only "dynamic" supported, explicitly specifying config of a
+                  cluster
+                type: string
               tolerations:
                 description: simplified tolerations, checked only by key existence,
                   expanding to NoExecute|NoSchedule tolerations

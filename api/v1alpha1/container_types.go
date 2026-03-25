@@ -177,6 +177,9 @@ type WekaContainerSpecOverrides struct {
 	UmountOnHost bool `json:"umountOnHost,omitempty"`
 	// DebugSleepOnTerminate specifies the number of seconds to sleep on container abnormal exit for debugging purposes
 	DebugSleepOnTerminate int `json:"debugSleepOnTerminate,omitempty"`
+	// DpdkBaseMemoryMbPerCore specifies the DPDK base memory in MB per core for frontend containers (client, s3, nfs)
+	// If set, total memory will be this value * NumCores. If not set, no dpdk_base_memory_mb will be configured
+	DpdkBaseMemoryMbPerCore *int `json:"dpdkBaseMemoryMbPerCore,omitempty"`
 	// MigrateOutFromPvc specifies that the container should be migrated out from PVC into local storage, this will be done prior to starting pod
 	MigrateOutFromPvc bool `json:"migrateOutFromPvc,omitempty"`
 }
