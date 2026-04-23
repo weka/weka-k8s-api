@@ -192,6 +192,13 @@ type WekaClientStatus struct {
 	Status         WekaClientStatusEnum `json:"status,omitempty"`
 	Stats          *ClientMetrics       `json:"stats,omitempty"`
 	PrinterColumns ClientPrinterColumns `json:"printer,omitempty"`
+	CsiOutputs     CsiDeploymentOutputs `json:"csiOutputs,omitempty"`
+}
+
+type CsiDeploymentOutputs struct {
+	CsiControllerName   string   `json:"csiControllerName,omitempty"`
+	CsiDriverName       string   `json:"csiDriverName,omitempty"`
+	StorageClassesNames []string `json:"storageClassesNames,omitempty"`
 }
 
 type ClientPrinterColumns struct {
