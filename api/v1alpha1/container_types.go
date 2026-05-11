@@ -419,6 +419,7 @@ type WekaContainerStatus struct {
 	// +kubebuilder:default="Init"
 	Status                   ContainerStatus          `json:"status"`
 	InternalStatus           string                   `json:"internalStatus,omitempty"` // weka local container internal status
+	HasLease                 *bool                    `json:"hasLease,omitempty"`
 	ManagementIP             string                   `json:"managementIP,omitempty"`
 	ManagementIPs            []string                 `json:"managementIPs,omitempty"`
 	ClusterContainerID       *int                     `json:"containerID,omitempty"`
