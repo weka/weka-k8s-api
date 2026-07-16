@@ -577,7 +577,7 @@ func (w *WekaContainer) IsDriversLoaderMode() bool {
 }
 
 func (w *WekaContainer) RequiresDrivers() bool {
-	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsEnvoy() && !w.IsTelemetry()
+	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsEnvoy() && !w.IsTelemetry() && !w.IsSSDProxyContainer()
 }
 
 func (w *WekaContainer) IsServiceContainer() bool {
