@@ -131,13 +131,17 @@ type WekaClientSpec struct {
 	// if not set (0), weka will find a free port from the portRange
 	AgentPort int `json:"agentPort,omitempty"`
 	// used for dynamic port allocation
-	PortRange          *PortRange        `json:"portRange,omitempty"`
-	NodeSelector       map[string]string `json:"nodeSelector,omitempty"`
-	WekaSecretRef      string            `json:"wekaSecretRef,omitempty"`
-	Network            Network           `json:"network,omitempty"`
-	DriversDistService string            `json:"driversDistService,omitempty"`
-	JoinIps            []string          `json:"joinIpPorts,omitempty"`
-	TargetCluster      ObjectReference   `json:"targetCluster,omitempty"`
+	PortRange     *PortRange        `json:"portRange,omitempty"`
+	NodeSelector  map[string]string `json:"nodeSelector,omitempty"`
+	WekaSecretRef string            `json:"wekaSecretRef,omitempty"`
+	Network       Network           `json:"network,omitempty"`
+	// use ipv6 for weka client networking configuration. applied only when the client
+	// containers are first created; changing it on an existing WekaClient has no effect —
+	// recreate the WekaClient to switch IP family.
+	Ipv6               bool            `json:"ipv6,omitempty"`
+	DriversDistService string          `json:"driversDistService,omitempty"`
+	JoinIps            []string        `json:"joinIpPorts,omitempty"`
+	TargetCluster      ObjectReference `json:"targetCluster,omitempty"`
 	// +kubebuilder:validation:Enum=auto;shared;dedicated;dedicated_ht;manual
 	//+kubebuilder:default=auto
 	CpuPolicy           CpuPolicy            `json:"cpuPolicy,omitempty"`
