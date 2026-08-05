@@ -121,6 +121,13 @@ type SignDrivesPayload struct {
 	//    ```
 	PCIDevices  *PCIDevices  `json:"pciDevices,omitempty"`
 	SignOptions *SignOptions `json:"options,omitempty"`
+	// IncludeRotational includes rotational (spinning) block devices in device discovery.
+	// Only meaningful for the all-not-root type; the PCI-ID and explicit-path types select
+	// devices directly and ignore it. Off by default because Weka rejects rotational devices
+	// at drive-add time ("Device is rotational and should not be used"), so signing one would
+	// consume a numDrives slot during EnsureDrives and then fail. Enable for lab /
+	// non-certified environments running Weka without SPDK.
+	IncludeRotational bool `json:"includeRotational,omitempty"`
 	// Shared enables shared drive signing for proxy mode (defaults to false).
 	// When enabled:
 	// - Drives are signed for proxy using 'weka-sign-drive sign proxy' command
