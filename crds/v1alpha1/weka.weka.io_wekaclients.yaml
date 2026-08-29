@@ -220,6 +220,12 @@ spec:
                 type: string
               imagePullSecret:
                 type: string
+              ipv6:
+                description: |-
+                  use ipv6 for weka client networking configuration. applied only when the client
+                  containers are first created; changing it on an existing WekaClient has no effect —
+                  recreate the WekaClient to switch IP family.
+                type: boolean
               joinIpPorts:
                 items:
                   type: string
