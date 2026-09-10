@@ -15,11 +15,12 @@ const (
 	WekaPolicyTypeEnableLocalDriversDistribution WekaPolicyType = opEnableLocalDriversDist
 	WekaPolicyTypeRemoteTracesSession            WekaPolicyType = opRemoteTracesSession
 	WekaPolicyTypeCleanStaleVirtualDrives        WekaPolicyType = opCleanStaleVirtualDrives
+	WekaPolicyTypeOperatorDefaults               WekaPolicyType = "operator-defaults"
 )
 
 // WekaPolicySpec defines the desired state of WekaPolicy
 type WekaPolicySpec struct {
-	// +kubebuilder:validation:Enum=sign-drives;discover-drives;ensure-nics;enable-local-drivers-distribution;remote-traces-session;clean-stale-virtual-drives
+	// +kubebuilder:validation:Enum=sign-drives;discover-drives;ensure-nics;enable-local-drivers-distribution;remote-traces-session;clean-stale-virtual-drives;operator-defaults
 	Type               WekaPolicyType  `json:"type"`
 	Payload            PolicyPayload   `json:"payload"`
 	Image              *string         `json:"image,omitempty"`
@@ -82,6 +83,7 @@ type PolicyPayload struct {
 	DriverDistPayload       *DriverDistPayload              `json:"driverDistPayload,omitempty"`
 	RemoteTracesSession     *RemoteTracesSessionConfig      `json:"remoteTracesSessionPayload,omitempty"`
 	CleanStaleVirtualDrives *CleanStaleVirtualDrivesPayload `json:"cleanStaleVirtualDrivesPayload,omitempty"`
+	OperatorDefaults        *OperatorDefaultsPayload        `json:"operatorDefaultsPayload,omitempty"`
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^(0|([0-9]+(\\.[0-9]+)?(s|m|h))+)$"
 	// +kubebuilder:default="5m"
