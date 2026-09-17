@@ -133,6 +133,15 @@ spec:
                               the background. False by default.
                             type: boolean
                         type: object
+                      drivers:
+                        description: Drivers configures the drivers build and distribution.
+                        properties:
+                          forceBuilderCli:
+                            description: |-
+                              ForceBuilderCli makes the drivers-builder init containers take the weka CLI from the builder
+                              image instead of the cluster image. False by default.
+                            type: boolean
+                        type: object
                     type: object
                   discoverDrivesPayload:
                     properties:
