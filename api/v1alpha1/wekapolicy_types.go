@@ -5,9 +5,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// WekaPolicyType enumerates the supported WekaPolicy types.
+type WekaPolicyType string
+
+const (
+	WekaPolicyTypeSignDrives                     WekaPolicyType = opSignDrives
+	WekaPolicyTypeDiscoverDrives                 WekaPolicyType = opDiscoverDrives
+	WekaPolicyTypeEnsureNICs                     WekaPolicyType = opEnsureNICs
+	WekaPolicyTypeEnableLocalDriversDistribution WekaPolicyType = opEnableLocalDriversDist
+	WekaPolicyTypeRemoteTracesSession            WekaPolicyType = opRemoteTracesSession
+	WekaPolicyTypeCleanStaleVirtualDrives        WekaPolicyType = opCleanStaleVirtualDrives
+)
+
 // WekaPolicySpec defines the desired state of WekaPolicy
 type WekaPolicySpec struct {
-	Type               string          `json:"type"`
+	// +kubebuilder:validation:Enum=sign-drives;discover-drives;ensure-nics;enable-local-drivers-distribution;remote-traces-session;clean-stale-virtual-drives
+	Type               WekaPolicyType  `json:"type,omitempty"`
 	Payload            PolicyPayload   `json:"payload"`
 	Image              *string         `json:"image,omitempty"`
 	ImagePullSecret    *string         `json:"imagePullSecret,omitempty"`
@@ -62,11 +75,14 @@ type WekaPolicyList struct {
 }
 
 type PolicyPayload struct {
-	SignDrives        *SignDrivesPayload       `json:"signDrivesPayload,omitempty"`
-	SchedulingConfig  *SchedulingConfigPayload `json:"schedulingConfigPayload,omitempty"`
-	DiscoverDrives    *DiscoverDrivesPayload   `json:"discoverDrivesPayload,omitempty"`
-	EnsureNICs        *EnsureNICsPayload       `json:"ensureNICsPayload,omitempty"`
-	DriverDistPayload *DriverDistPayload       `json:"driverDistPayload,omitempty"`
+	SignDrives              *SignDrivesPayload              `json:"signDrivesPayload,omitempty"`
+	SchedulingConfig        *SchedulingConfigPayload        `json:"schedulingConfigPayload,omitempty"`
+	DiscoverDrives          *DiscoverDrivesPayload          `json:"discoverDrivesPayload,omitempty"`
+	EnsureNICs              *EnsureNICsPayload              `json:"ensureNICsPayload,omitempty"`
+	DriverDistPayload       *DriverDistPayload              `json:"driverDistPayload,omitempty"`
+	RemoteTracesSession     *RemoteTracesSessionConfig      `json:"remoteTracesSessionPayload,omitempty"`
+	CleanStaleVirtualDrives *CleanStaleVirtualDrivesPayload `json:"cleanStaleVirtualDrivesPayload,omitempty"`
+	Configuration           *ConfigurationPayload           `json:"configurationPayload,omitempty"`
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^(0|([0-9]+(\\.[0-9]+)?(s|m|h))+)$"
 	// +kubebuilder:default="5m"
@@ -90,11 +106,19 @@ type DriverDistPayload struct {
 	// ArchitectureLabelKey is the custom label key to use for storing the node's architecture.
 	// If not specified, "weka.io/architecture" will be used.
 	ArchitectureLabelKey *string `json:"architectureLabelKey,omitempty"`
+	// OsLabelKey is the custom label key to use for storing the node's os.
+	// If not specified, "weka.io/os" will be used.
+	OsLabelKey *string `json:"osLabelKey,omitempty"`
+	// BuilderImageOverride is an optional image that you can specify for the builder
+	BuilderImageOverride string `json:"builderImageOverride,omitempty"`
 	// BuilderPreRunScript is an optional script to run on builder containers after kernel validation.
 	BuilderPreRunScript *string `json:"builderPreRunScript,omitempty"`
 	// DistNodeSelector is the node selector for the drivers distribution (dist) container.
 	// If not specified, the dist container will be scheduled on any available node.
 	DistNodeSelector map[string]string `json:"distNodeSelector,omitempty"`
+	// DistResources overrides the pod resources of the drivers distribution (dist) container.
+	// Fields left empty keep the built-in sizing.
+	DistResources *PodResourcesSpec `json:"distResources,omitempty"`
 }
 
 func init() {

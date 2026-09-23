@@ -20,6 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -59,6 +60,9 @@ const (
 )
 
 type WekaClientSpecOverrides struct {
+	// can be used to specify a build_id for a driver in the distributor service, keep empty for auto detection default
+	DriversBuildId     *string `json:"driversBuildId,omitempty"`
+	DriversLoaderImage string  `json:"driversLoaderImage,omitempty"`
 	// used to override machine identifier node reference for client containers
 	MachineIdentifierNodeRef string `json:"machineIdentifierNodeRef,omitempty"`
 	// unsafe operation, forces drain on the node where the container is running, should not be used unless instructed explicitly by weka personnel, the effect of drain is throwing away all IOs and acknowledging all umounts in unsafe manner
@@ -67,6 +71,22 @@ type WekaClientSpecOverrides struct {
 	SkipActiveMountsCheck bool `json:"skipActiveMountsCheck,omitempty"`
 	// unsafe operation, runs nsenter in root namespace to umount all wekafs mounts visible on host
 	UmountOnHost bool `json:"umountOnHost,omitempty"`
+	// unsafe parameter, disables anti-affinities on client pods, allowing to schedule more than one client pod per node.
+	// Running multiple clients for multiple clusters on the same node is not fully supported yet, and this flag should not be used in production.
+	DropAffinityConstraints bool `json:"dropAffinityConstraints,omitempty"`
+	// override name used in weka local setup for the container
+	// this can be used for integration with external client on the host
+	WekaContainerName string `json:"wekaContainerName,omitempty"`
+	DpdkBaseMemoryMb  int    `json:"dpdkBaseMemoryMb,omitempty"`
+	// how long to wait, once IO processes are reported up, before considering the container's applied
+	// image settled. nil/0 (default): don't wait.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^(0|([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$"
+	// +optional
+	WaitSinceIoProcessesUpTimeout *metav1.Duration `json:"waitSinceIoProcessesUpTimeout,omitempty"`
+	// configures the weka agent of this client's containers with [mounts] allocate_reserved_space=false.
+	// applied only when a container is created; toggling it later does not reconfigure existing containers
+	NoReserveSpace bool `json:"noReserveSpace,omitempty"`
 }
 
 type UpgradePolicy struct {
@@ -88,6 +108,9 @@ type PortRange struct {
 type PodResources struct {
 	Cpu    resource.Quantity `json:"cpu,omitempty"`
 	Memory resource.Quantity `json:"memory,omitempty"`
+	// Hugepages2Mi is requested verbatim as the pod's hugepages-2Mi resource. 1Gi pages are
+	// not settable through this field.
+	Hugepages2Mi resource.Quantity `json:"hugepages-2Mi,omitempty"`
 }
 
 type PodResourcesSpec struct {
@@ -121,20 +144,31 @@ type WekaClientSpec struct {
 	// if not set (0), weka will find a free port from the portRange
 	AgentPort int `json:"agentPort,omitempty"`
 	// used for dynamic port allocation
-	PortRange          *PortRange        `json:"portRange,omitempty"`
-	NodeSelector       map[string]string `json:"nodeSelector,omitempty"`
-	WekaSecretRef      string            `json:"wekaSecretRef,omitempty"`
-	Network            Network           `json:"network,omitempty"`
-	DriversDistService string            `json:"driversDistService,omitempty"`
-	DriversLoaderImage string            `json:"driversLoaderImage,omitempty"`
-	JoinIps            []string          `json:"joinIpPorts,omitempty"`
-	TargetCluster      ObjectReference   `json:"targetCluster,omitempty"`
+	PortRange    *PortRange        `json:"portRange,omitempty"`
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// extra volumes added to every client pod, in the same shape as a PodSpec's `volumes`.
+	// Names must not collide with operator-managed volumes; see
+	// doc/operator/deployment/extra-volumes.md for the reserved names and paths.
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumes *runtime.RawExtension `json:"extraVolumes,omitempty"`
+	// mounts for `extraVolumes`, applied to the weka container only (not init containers)
+	ExtraVolumeMounts  []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	WekaSecretRef      string           `json:"wekaSecretRef,omitempty"`
+	Network            Network          `json:"network,omitempty"`
+	DriversDistService string           `json:"driversDistService,omitempty"`
+	JoinIps            []string         `json:"joinIpPorts,omitempty"`
+	TargetCluster      ObjectReference  `json:"targetCluster,omitempty"`
 	// +kubebuilder:validation:Enum=auto;shared;dedicated;dedicated_ht;manual
 	//+kubebuilder:default=auto
-	CpuPolicy           CpuPolicy            `json:"cpuPolicy,omitempty"`
-	CpuRequest          string               `json:"cpuRequest,omitempty"`
-	CoresNumber         int                  `json:"coresNum,omitempty"`
+	CpuPolicy   CpuPolicy `json:"cpuPolicy,omitempty"`
+	CpuRequest  string    `json:"cpuRequest,omitempty"`
+	CoresNumber int       `json:"coresNum,omitempty"`
+	// extraCores reserves additional CPUs for the pod on top of the weka FE cores.
+	// +kubebuilder:validation:Minimum=0
+	ExtraCores          int                  `json:"extraCores,omitempty"`
 	CoreIds             []int                `json:"coreIds,omitempty"`
+	NonDatapathCoreIds  []int                `json:"nonDatapathCoreIds,omitempty"`
 	TracesConfiguration *TracesConfiguration `json:"tracesConfiguration,omitempty"`
 	Tolerations         []string             `json:"tolerations,omitempty"`
 	RawTolerations      []v1.Toleration      `json:"rawTolerations,omitempty"`
@@ -146,9 +180,7 @@ type WekaClientSpec struct {
 	// hugepages, value in megabytes
 	HugePages int `json:"hugepages,omitempty"`
 	// value in megabytes to offset
-	HugePagesOffset *int `json:"hugepagesOffset,omitempty"`
-	//DEPRECATED, kept for compatibility with old API clients, not taking any action, to be removed on new API version
-	WekaHomeConfig  WekahomeClientConfig     `json:"wekaHomeConfig,omitempty"`
+	HugePagesOffset *int                     `json:"hugepagesOffset,omitempty"`
 	WekaHome        *WekahomeClientConfig    `json:"wekaHome,omitempty"`
 	UpgradePolicy   UpgradePolicy            `json:"upgradePolicy,omitempty"`
 	AllowHotUpgrade bool                     `json:"allowHotUpgrade,omitempty"`
@@ -164,6 +196,9 @@ type WekaClientSpec struct {
 	// +kubebuilder:validation:Type=object
 	// EXPERIMENTAL, ALPHA STATE, should not be used in production: if set, allows to reuse the same csi resources for multiple clients
 	CsiConfig *ClientCsiConfig `json:"csiConfig,omitempty"`
+
+	// Numa configures NUMA confinement for this client container
+	Numa *WekaNuma `json:"numa,omitempty"`
 }
 
 func (c *WekaClientSpec) GetCsiConfig() ClientCsiConfig {
@@ -183,6 +218,10 @@ type WekaClientStatus struct {
 	Status         WekaClientStatusEnum `json:"status,omitempty"`
 	Stats          *ClientMetrics       `json:"stats,omitempty"`
 	PrinterColumns ClientPrinterColumns `json:"printer,omitempty"`
+	// Pod config version this client has adopted. Mirrors the WekaCluster field: it gates
+	// the first-deploy adoption that lets tracking start on pods predating the annotation
+	// without rolling them.
+	LastAppliedPodConfigHash string `json:"lastAppliedPodConfigHash,omitempty"`
 }
 
 type ClientPrinterColumns struct {

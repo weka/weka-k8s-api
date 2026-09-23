@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/weka/weka-k8s-api/api/v1alpha1/condition"
@@ -24,6 +25,7 @@ type NodeName types.NodeName
 // +kubebuilder:printcolumn:name="Node",type="string",JSONPath=".status.printer.nodeAffinity",description="Node affinity of container",priority=0
 // +kubebuilder:printcolumn:name="Processes",type="string",JSONPath=".status.printer.processes",description="Number of processes per state",priority=1
 // +kubebuilder:printcolumn:name="Drives",type="string",JSONPath=".status.printer.drives",description="Number of drives per state",priority=1
+// +kubebuilder:printcolumn:name="Capacity",type="string",JSONPath=".status.printer.capacity",description="Per-drive-type capacity (TLC/QLC)",priority=1
 // +kubebuilder:printcolumn:name="Mounts",type="string",JSONPath=".status.printer.activeMounts",description="Number of active mounts",priority=1
 // +kubebuilder:printcolumn:name="CPU",type="string",JSONPath=".status.stats.cpuUtilization",description="CPU Utilization",priority=1
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time since creation",priority=0
@@ -91,7 +93,11 @@ const (
 	WekaContainerModeDiscovery      = "discovery"
 	WekaContainerModeS3             = "s3"
 	WekaContainerModeNfs            = "nfs"
+	WekaContainerModeSmbw           = "smbw"
+	WekaContainerModeDataServices   = "data-services"
 	WekaContainerModeEnvoy          = "envoy"
+	WekaContainerModeSSDProxy       = "ssdproxy"
+	WekaContainerModeTelemetry      = "telemetry"
 	WekaContainerModeAdhocOpWC      = "adhoc-op-with-container"
 	WekaContainerModeAdhocOp        = "adhoc-op"
 	PersistencePathBase             = "/opt/k8s-weka"
@@ -99,7 +105,7 @@ const (
 	PersistencePathBaseRhCos        = "/root/k8s-weka"
 	OsNameOpenshift                 = "rhcos"
 	OsNameCos                       = "cos"
-	// Statis is fine, since we will not relay on host network here
+	// Static is fine, since we will not rely on host network here
 	StaticPortAdhocyWCOperations      = 60040
 	StaticPortAdhocyWCOperationsAgent = 60039
 )
@@ -145,6 +151,12 @@ const (
 	Completed            ContainerStatus = "Completed"
 	Building             ContainerStatus = "Building"
 	TimestampStopAttempt ContainerStatus = "StoppingAttempt"
+	// TimestampIoProcessesUp anchors the time IO processes were first observed up, for
+	// waitSinceIoProcessesUpTimeout.
+	TimestampIoProcessesUp ContainerStatus = "IoProcessesUp"
+	// Stale indicates the container's node has been removed from the k8s cluster and it is
+	// within the graceful-removal grace period before the operator deletes it.
+	Stale ContainerStatus = "Stale"
 )
 
 type WekaContainerSpecOverrides struct {
@@ -152,6 +164,9 @@ type WekaContainerSpecOverrides struct {
 	SkipDeactivate bool `json:"skipDeactivate,omitempty"`
 	// skips resign of drives, if we did not resign drives on removal of drive container we will not be able to reuse them, and manual operation with force resign will be required
 	SkipDrivesForceResign bool `json:"skipDrivesForceResign,omitempty"`
+	// skips removal of virtual drives from ssdproxy - unsafe operation that can lead to virtual drives leftovers
+	// should not be used unless instructed explicitly by weka personnel
+	SkipVirtualDrivesRemoval bool `json:"skipVirtualDrivesRemoval,omitempty"`
 	// skips cleanup of persistent directory, if this operation was omit local data of container will remain in persistent location(/opt/k8s-weka on vanilla OS/k8s distributions)
 	SkipCleanupPersistentDir bool `json:"skipCleanupPersistentDir,omitempty"`
 	// unsafe operation, skips graceful stop of weka container for a quick replacement to a new image, should not be used unless instructed explicitly by weka personnel
@@ -171,13 +186,51 @@ type WekaContainerSpecOverrides struct {
 	DebugSleepOnTerminate int `json:"debugSleepOnTerminate,omitempty"`
 	// MigrateOutFromPvc specifies that the container should be migrated out from PVC into local storage, this will be done prior to starting pod
 	MigrateOutFromPvc bool `json:"migrateOutFromPvc,omitempty"`
+	// configures the weka agent with [mounts] allocate_reserved_space=false. set once, at container
+	// creation, from the noReserveSpace override of the owning WekaCluster/WekaClient
+	NoReserveSpace bool `json:"noReserveSpace,omitempty"`
 }
 
 type Instructions struct {
-	Type    string `json:"type"`
-	Payload string `json:"payload,omitempty"`
+	Type    InstructionType `json:"type"`
+	Payload string          `json:"payload,omitempty"`
 }
 
+type DataServicesConfig struct {
+	DataServicesFeCores int `json:"dataServicesFeCores,omitempty"`
+}
+
+// WekaNumaMethod defines how NUMA confinement is enforced
+// +kubebuilder:validation:Enum=device-plugin;dra
+type WekaNumaMethod string
+
+const (
+	WekaNumaMethodDevicePlugin WekaNumaMethod = "device-plugin"
+	// WekaNumaMethodDra requests the NUMA region through a DRA ResourceClaim
+	// (driver numa.weka.io) instead of a device-plugin extended resource.
+	WekaNumaMethodDra WekaNumaMethod = "dra"
+)
+
+// WekaNuma configures NUMA confinement for a single weka container
+type WekaNuma struct {
+	// Single, when true, confines the container to a single NUMA region
+	// +optional
+	Single bool `json:"single,omitempty"`
+	// Region is the NUMA region index to pin this container to
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	Region *int `json:"region,omitempty"`
+	// Method selects the enforcement mechanism
+	// +optional
+	Method WekaNumaMethod `json:"method,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="!has(self.driveCapacity) || self.driveCapacity == 0 || !has(self.driveTypesRatio)",message="driveCapacity and driveTypesRatio are mutually exclusive; use driveCapacity for TLC-only mode, or containerCapacity with driveTypesRatio for mixed drive types"
+// +kubebuilder:validation:XValidation:rule="!has(self.driveCapacity) || self.driveCapacity == 0 || !has(self.numDrives) || self.numDrives == 0 || self.numDrives >= self.numCores",message="numDrives must be >= numCores when using driveCapacity (TLC-only mode); each core requires at least one virtual drive"
+// +kubebuilder:validation:XValidation:rule="!has(self.numDrives) || self.numDrives == 0 || !has(self.containerCapacity) || self.containerCapacity == 0",message="numDrives and containerCapacity are mutually exclusive; use numDrives with driveCapacity for TLC-only mode, or containerCapacity with driveTypesRatio for mixed drive types"
+// +kubebuilder:validation:XValidation:rule="!has(self.containerCapacity) || self.containerCapacity > 0",message="containerCapacity must be greater than 0 when specified"
+// +kubebuilder:validation:XValidation:rule="!has(self.driveTypesRatio) || self.driveTypesRatio.tlc > 0 || self.driveTypesRatio.qlc > 0",message="at least one of driveTypesRatio.tlc or driveTypesRatio.qlc must be greater than 0"
+// +kubebuilder:validation:XValidation:rule="!has(self.driveCapacity) || self.driveCapacity > 0",message="driveCapacity must be greater than 0 when specified"
 type WekaContainerSpec struct {
 	// name of the node where the container should run on
 	NodeAffinity NodeName `json:"nodeAffinity,omitempty"`
@@ -192,41 +245,54 @@ type WekaContainerSpec struct {
 	// deprecated, use ExposedPorts instead
 	ExposePorts []int `json:"exposePorts,omitempty"`
 	// ports to be exposed on the container, proxied to pod
-	ExposedPorts      []v1.ContainerPort `json:"exposedPorts,omitempty"`
-	AgentPort         int                `json:"agentPort,omitempty"`
-	PortRange         *PortRange         `json:"portRange,omitempty"`
-	Image             string             `json:"image"`
-	ImagePullSecret   string             `json:"imagePullSecret,omitempty"`
-	WekaContainerName string             `json:"name"`
-	// +kubebuilder:validation:Enum=drive;compute;client;dist;drivers-dist;drivers-loader;drivers-builder;discovery;s3;adhoc-op-with-container;adhoc-op;envoy;nfs
+	ExposedPorts []v1.ContainerPort `json:"exposedPorts,omitempty"`
+	AgentPort    int                `json:"agentPort,omitempty"`
+	PortRange    *PortRange         `json:"portRange,omitempty"`
+	Image        string             `json:"image"`
+	// a hash that represents the config state of a WekaContainer, will recreate the pod if stale
+	PodConfigHash     string `json:"podConfigHash,omitempty"`
+	ImagePullSecret   string `json:"imagePullSecret,omitempty"`
+	WekaContainerName string `json:"name"`
+	// +kubebuilder:validation:Enum=drive;compute;client;dist;drivers-dist;drivers-loader;drivers-builder;discovery;s3;adhoc-op-with-container;adhoc-op;envoy;nfs;smbw;telemetry;ssdproxy;data-services;data-services-fe
 	Mode       string `json:"mode"`
 	NumCores   int    `json:"numCores"`             //numCores is weka-specific cores
 	ExtraCores int    `json:"extraCores,omitempty"` //extraCores is temporary solution for S3 containers, cores allocation on top of weka cores
 	CoreIds    []int  `json:"coreIds,omitempty"`
+	// NonDatapathCoreIds pins management/aux (non-IONode) processes to specific CPUs.
+	NonDatapathCoreIds []int `json:"nonDatapathCoreIds,omitempty"`
 	// +kubebuilder:validation:Enum=auto;shared;dedicated;dedicated_ht;manual
 	// +kubebuilder:default=auto
-	CpuPolicy             CpuPolicy            `json:"cpuPolicy,omitempty"`
-	Network               Network              `json:"network,omitempty"`
-	Hugepages             int                  `json:"hugepages,omitempty"`
-	HugepagesOffset       int                  `json:"hugepagesOffset,omitempty"`
-	HugepagesSize         string               `json:"hugepagesSize,omitempty"`
-	HugepagesOverride     string               `json:"hugepagesSizeOverride,omitempty"`
-	NumDrives             int                  `json:"numDrives,omitempty"`
-	DriversDistService    string               `json:"driversDistService,omitempty"`
-	DriversLoaderImage    string               `json:"driversLoaderImage,omitempty"`
-	WekaSecretRef         v1.EnvVarSource      `json:"wekaSecretRef,omitempty"`
-	JoinIps               []string             `json:"joinIpPorts,omitempty"`
-	TracesConfiguration   *TracesConfiguration `json:"tracesConfiguration,omitempty"`
-	Tolerations           []v1.Toleration      `json:"tolerations,omitempty"`
-	NodeInfoConfigMap     string               `json:"nodeInfoConfigMap,omitempty"`
-	Ipv6                  bool                 `json:"ipv6,omitempty"`
-	AdditionalMemory      int                  `json:"additionalMemory,omitempty"`
-	Group                 string               `json:"group,omitempty"`
-	ServiceAccountName    string               `json:"serviceAccountName,omitempty"`
-	AdditionalSecrets     map[string]string    `json:"additionalSecrets,omitempty"`
-	Instructions          *Instructions        `json:"instructions,omitempty"`
-	NoAffinityConstraints bool                 `json:"dropAffinityConstraints,omitempty"`
-	UploadResultsTo       string               `json:"uploadResultsTo,omitempty"`
+	CpuPolicy           CpuPolicy             `json:"cpuPolicy,omitempty"`
+	Network             Network               `json:"network,omitempty"`
+	Hugepages           int                   `json:"hugepages,omitempty"`
+	HugepagesOffset     int                   `json:"hugepagesOffset,omitempty"`
+	HugepagesSize       string                `json:"hugepagesSize,omitempty"`
+	NumDrives           int                   `json:"numDrives,omitempty"`
+	DriversDistService  string                `json:"driversDistService,omitempty"`
+	DriversLoaderImage  string                `json:"driversLoaderImage,omitempty"`
+	DriversBuildId      *string               `json:"driversBuildId,omitempty"`
+	Builder             *WekaContainerBuilder `json:"builder,omitempty"`
+	WekaSecretRef       v1.EnvVarSource       `json:"wekaSecretRef,omitempty"`
+	JoinIps             []string              `json:"joinIpPorts,omitempty"`
+	TracesConfiguration *TracesConfiguration  `json:"tracesConfiguration,omitempty"`
+	Tolerations         []v1.Toleration       `json:"tolerations,omitempty"`
+	NodeInfoConfigMap   string                `json:"nodeInfoConfigMap,omitempty"`
+	Ipv6                bool                  `json:"ipv6,omitempty"`
+	AdditionalMemory    int                   `json:"additionalMemory,omitempty"`
+	Group               string                `json:"group,omitempty"`
+	ServiceAccountName  string                `json:"serviceAccountName,omitempty"`
+	AdditionalSecrets   map[string]string     `json:"additionalSecrets,omitempty"`
+	// extra volumes added to this pod, in the same shape as a PodSpec's `volumes`.
+	// Propagated from the owning WekaCluster/WekaClient; names must not collide with
+	// operator-managed volumes.
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumes *runtime.RawExtension `json:"extraVolumes,omitempty"`
+	// mounts for `extraVolumes`, applied to the weka container only (not init containers)
+	ExtraVolumeMounts     []v1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	Instructions          *Instructions    `json:"instructions,omitempty"`
+	NoAffinityConstraints bool             `json:"dropAffinityConstraints,omitempty"`
+	UploadResultsTo       string           `json:"uploadResultsTo,omitempty"`
 	// +kubebuilder:validation:Enum=manual;all-at-once;rolling;all-at-once-force
 	// +kubebuilder:default=manual
 	UpgradePolicyType UpgradePolicyType `json:"upgradePolicyType,omitempty"`
@@ -234,6 +300,19 @@ type WekaContainerSpec struct {
 	// +kubebuilder:default=active
 	State           ContainerState `json:"state,omitempty"`
 	AllowHotUpgrade bool           `json:"allowHotUpgrade,omitempty"`
+	// DriveCapacity specifies the capacity (in GiB) per virtual drive, indicates this container uses shared drives via SSD proxy.
+	// When enabled, the container will:
+	// - Use virtual UUIDs instead of device paths for drives
+	// - Allocate capacity from shared drives rather than exclusive drives
+	// - Require an SSD proxy container to be running on the same node
+	// This value is copied from the cluster's DriveSharing.DriveCapacity configuration.
+	// Used to calculate total capacity request: NumDrives * DriveCapacity
+	DriveCapacity int `json:"driveCapacity,omitempty"`
+	// ContainerCapacity specifies the total capacity (in GiB) requested by this container when using shared drives via SSD proxy.
+	// This value takes precedence over DriveCapacity when both are set. It allows more flexible capacity allocation.
+	ContainerCapacity int `json:"containerCapacity,omitempty"`
+	// DriveTypesRatio specifies the desired ratio of drive types (TLC vs QLC) when allocating drives for the container.
+	DriveTypesRatio *DriveTypesRatio `json:"driveTypesRatio,omitempty"`
 	// sets weka cluster-side timeout, if client is not coming back in specified duration it will be auto removed from cluster config
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^(0|([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+)$"
@@ -242,25 +321,39 @@ type WekaContainerSpec struct {
 	Overrides         *WekaContainerSpecOverrides `json:"overrides,omitempty"`
 	HostPID           bool                        `json:"hostPID,omitempty"`
 	// resources to be proxied as-is to the pod spec
-	Resources *PodResourcesSpec `json:"resources,omitempty"`
-	PVC       *PVCConfig        `json:"pvc,omitempty"`
+	Resources          *PodResourcesSpec   `json:"resources,omitempty"`
+	PVC                *PVCConfig          `json:"pvc,omitempty"`
+	DpdkBaseMemoryMb   int                 `json:"dpdkBaseMemoryMb,omitempty"`
+	DataServicesConfig *DataServicesConfig `json:"dataServicesConfig,omitempty"`
+	// Numa configures NUMA confinement for this container
+	Numa *WekaNuma `json:"numa,omitempty"`
 }
 
-type AWSNetwork struct {
-	// should provide list of additional nics indexes starting from 1, index 0 is reserved for kernel networking
-	DeviceSlots []int `json:"deviceSlots,omitempty"`
+// VirtualDrive represents a virtual drive allocation in drive sharing mode
+type VirtualDrive struct {
+	// VirtualUUID is the virtual drive identifier
+	VirtualUUID string `json:"virtualUUID"`
+	// PhysicalUUID is the physical drive UUID obtained from proxy signing
+	PhysicalUUID string `json:"physicalUUID"`
+	// CapacityGiB is the allocated capacity in GiB
+	CapacityGiB int `json:"capacityGiB"`
+	// Serial is the serial number of the physical drive
+	Serial string `json:"serial"`
+	// Type is the type of the drive (e.g., TLC, QLC)
+	Type string `json:"type,omitempty"`
 }
 
 type ContainerAllocations struct {
 	Drives    []string `json:"drives,omitempty"`
-	EthSlots  []string `json:"ethSlots,omitempty"`
-	LbPort    int      `json:"lbPort,omitempty"`
 	WekaPort  int      `json:"wekaPort,omitempty"`
 	AgentPort int      `json:"agentPort,omitempty"`
 	// value of the failure domain label of the node where the container is running
 	FailureDomain     *string  `json:"failureDomain,omitempty"`
 	MachineIdentifier string   `json:"machineIdentifier,omitempty"`
 	NetDevices        []string `json:"netDevices,omitempty"`
+	// VirtualDrives contains virtual drive allocations for drive sharing mode.
+	// Each VirtualDrive maps a virtual UUID to a physical drive UUID with allocated capacity.
+	VirtualDrives []VirtualDrive `json:"virtualDrives,omitempty"`
 }
 
 func (c *ContainerAllocations) Equals(other *ContainerAllocations) bool {
@@ -270,10 +363,10 @@ func (c *ContainerAllocations) Equals(other *ContainerAllocations) bool {
 	if c == nil || other == nil {
 		return false
 	}
-	if c.LbPort != other.LbPort || c.WekaPort != other.WekaPort || c.AgentPort != other.AgentPort {
+	if c.WekaPort != other.WekaPort || c.AgentPort != other.AgentPort {
 		return false
 	}
-	if !slices.Equal(c.Drives, other.Drives) || !slices.Equal(c.EthSlots, other.EthSlots) || !slices.Equal(c.NetDevices, other.NetDevices) {
+	if !slices.Equal(c.Drives, other.Drives) || !slices.Equal(c.NetDevices, other.NetDevices) {
 		return false
 	}
 	if (c.FailureDomain == nil && other.FailureDomain != nil) || (c.FailureDomain != nil && other.FailureDomain == nil) {
@@ -282,7 +375,72 @@ func (c *ContainerAllocations) Equals(other *ContainerAllocations) bool {
 	if c.FailureDomain != nil && *c.FailureDomain != *other.FailureDomain {
 		return false
 	}
+	if c.MachineIdentifier != other.MachineIdentifier {
+		return false
+	}
+	// Compare VirtualDrives slices
+	if len(c.VirtualDrives) != len(other.VirtualDrives) {
+		return false
+	}
+	for i := range c.VirtualDrives {
+		if c.VirtualDrives[i].VirtualUUID != other.VirtualDrives[i].VirtualUUID ||
+			c.VirtualDrives[i].PhysicalUUID != other.VirtualDrives[i].PhysicalUUID ||
+			c.VirtualDrives[i].CapacityGiB != other.VirtualDrives[i].CapacityGiB ||
+			c.VirtualDrives[i].Serial != other.VirtualDrives[i].Serial {
+			return false
+		}
+	}
 	return true
+}
+
+func (c *ContainerAllocations) GetVirtualDrivesUuids() []string {
+	uuids := make([]string, 0, len(c.VirtualDrives))
+	for _, d := range c.VirtualDrives {
+		uuids = append(uuids, d.VirtualUUID)
+	}
+	return uuids
+}
+
+func (c *ContainerAllocations) GetVirtualDrivesPhysicalUuids() []string {
+	uuids := make([]string, 0, len(c.VirtualDrives))
+	for _, d := range c.VirtualDrives {
+		uuids = append(uuids, d.PhysicalUUID)
+	}
+	return uuids
+}
+
+// GetTotalAllocatedCapacity returns the total capacity allocated across all virtual drives (in GiB).
+func (c *ContainerAllocations) GetAllocatedVirtualDrivesCapacity() int {
+	total := 0
+	for _, d := range c.VirtualDrives {
+		total += d.CapacityGiB
+	}
+	return total
+}
+
+// GetAllocatedVirtualDrivesCapacityByType returns the capacity (GiB) allocated to virtual drives,
+// split by drive type. Anything not tagged "QLC" is counted as TLC (matching the planner's
+// convention, where the absence of a QLC tag means TLC). Used by the reallocation path to compute
+// per-type missing capacity so a grow converges the realized split toward driveTypesRatio instead of
+// piling the increment on top of a pre-existing, ratio-mismatched split.
+func (c *ContainerAllocations) GetAllocatedVirtualDrivesCapacityByType() (tlc, qlc int) {
+	for _, d := range c.VirtualDrives {
+		if d.Type == "QLC" {
+			qlc += d.CapacityGiB
+		} else {
+			tlc += d.CapacityGiB
+		}
+	}
+	return tlc, qlc
+}
+
+type Drive struct {
+	Uuid         string `json:"uuid"`
+	AddedTime    string `json:"added_time"`
+	DevicePath   string `json:"device_path"`
+	SerialNumber string `json:"serial_number"`
+	SizeBytes    int64  `json:"size_bytes,omitempty"`
+	Status       string `json:"status"`
 }
 
 type WekaContainerMetrics struct {
@@ -301,6 +459,8 @@ type ContainerPrinterColumns struct {
 	ManagementIPs string `json:"managementIPs,omitempty"`
 	// node name where the container is running
 	NodeAffinity string `json:"nodeAffinity,omitempty"`
+	// per-drive-type capacity of a drive container, e.g. "TLC 30TiB / QLC 60TiB" (drive-sharing only)
+	Capacity string `json:"capacity,omitempty"`
 }
 
 func (c *ContainerPrinterColumns) SetManagementIps(ips []string) {
@@ -324,15 +484,36 @@ type WekaContainerStatus struct {
 	ClusterContainerID       *int                     `json:"containerID,omitempty"`
 	ClusterID                string                   `json:"clusterID,omitempty"`
 	Conditions               []metav1.Condition       `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
-	LastAppliedImage         string                   `json:"lastAppliedImage,omitempty"` // Explicit field for upgrade tracking, more generic lastAppliedSpec might be introduced later
-	LastAppliedSpec          string                   `json:"lastAppliedSpec,omitempty"`  // set by weka cluster or client or other higher level controller, to track if higher level spec was propagated
-	NodeAffinity             NodeName                 `json:"nodeAffinity,omitempty"`     // active nodeAffinity, copied from spec and populated if nodeSelector was used instead of direct nodeAffinity
+	LastAppliedImage         string                   `json:"lastAppliedImage,omitempty"`         // Explicit field for upgrade tracking, more generic lastAppliedSpec might be introduced later
+	LastAppliedSpec          string                   `json:"lastAppliedSpec,omitempty"`          // set by weka cluster or client or other higher level controller, to track if higher level spec was propagated
+	LastAppliedPodConfigHash string                   `json:"lastAppliedPodConfigHash,omitempty"` // to signal to a higher controller WekaContainer's pod status
+	NodeAffinity             NodeName                 `json:"nodeAffinity,omitempty"`             // active nodeAffinity, copied from spec and populated if nodeSelector was used instead of direct nodeAffinity
 	ExecutionResult          *string                  `json:"result,omitempty"`
 	Allocations              *ContainerAllocations    `json:"allocations,omitempty"`
+	AddedDrives              []Drive                  `json:"addedDrives,omitempty"` // drives that were added to the weka cluster
 	Stats                    *WekaContainerMetrics    `json:"stats,omitempty"`
 	PrinterColumns           *ContainerPrinterColumns `json:"printer,omitempty"`
 	Timestamps               map[string]metav1.Time   `json:"timestamps,omitempty"`
 	NotToleratedOnReschedule bool                     `json:"notToleratedOnReschedule,omitempty"`
+}
+
+func (s *WekaContainerStatus) GetAddedDrivesSerials() []string {
+	serials := make([]string, 0, len(s.AddedDrives))
+	for _, d := range s.AddedDrives {
+		if d.SerialNumber == "" {
+			continue
+		}
+		serials = append(serials, d.SerialNumber)
+	}
+	return serials
+}
+
+func (s *WekaContainerStatus) GetAddedDrivesUuids() []string {
+	uuids := make([]string, 0, len(s.AddedDrives))
+	for _, d := range s.AddedDrives {
+		uuids = append(uuids, d.Uuid)
+	}
+	return uuids
 }
 
 func (s *WekaContainerStatus) GetManagementIps() []string {
@@ -350,6 +531,13 @@ func (s *WekaContainerStatus) GetPrinterColumns() *ContainerPrinterColumns {
 		return &ContainerPrinterColumns{}
 	}
 	return s.PrinterColumns
+}
+
+func (s *WekaContainerStatus) GetStats() *WekaContainerMetrics {
+	if s.Stats == nil {
+		return &WekaContainerMetrics{}
+	}
+	return s.Stats
 }
 
 // TraceConfiguration defines the configuration for the traces, accepts parameters in gigabytes
@@ -429,7 +617,7 @@ func (w *WekaContainer) IsDriversLoaderMode() bool {
 }
 
 func (w *WekaContainer) RequiresDrivers() bool {
-	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsEnvoy()
+	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsEnvoy() && !w.IsTelemetry()
 }
 
 func (w *WekaContainer) IsServiceContainer() bool {
@@ -446,11 +634,43 @@ func (w *WekaContainer) IsServiceContainer() bool {
 }
 
 func (w *WekaContainer) IsHostNetwork() bool {
-	return w.IsWekaContainer() && !w.IsDriversContainer()
+	// ensure-nics reaches the node-local instance metadata service (IMDS), which
+	// can be unreachable from the pod network (e.g. EKS with an IMDSv2 hop limit of
+	// 1), so it runs on the host network. It shares the adhoc-op-with-container
+	// mode with get-feature-flags, so we distinguish it by instruction type rather
+	// than by mode (mirrors IsDriversLoaderMode).
+	if w.IsEnsureNICs() {
+		return true
+	}
+	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsSSDProxyContainer() && !w.IsTelemetry()
+}
+
+func (w *WekaContainer) IsEnsureNICs() bool {
+	return w.Spec.Mode == WekaContainerModeAdhocOpWC &&
+		w.Spec.Instructions != nil &&
+		w.Spec.Instructions.Type == InstructionTypeEnsureNICs
 }
 
 func (w *WekaContainer) ShouldJoinCluster() bool {
-	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsEnvoy()
+	return w.IsWekaContainer() && !w.IsDriversContainer() && !w.IsEnvoy() && !w.IsSSDProxyContainer() && !w.IsTelemetry()
+}
+
+// NamedHugepages2MiMiB returns the hugepages-2Mi amount (MiB) that spec.resources names, and
+// whether it named one at all. Request and limit are interchangeable here since kubelet requires
+// a hugepages request and its limit to be equal. Shared so the pod's real request and the
+// capacity planner's charge for it cannot drift apart.
+func (s *WekaContainerSpec) NamedHugepages2MiMiB() (int, bool) {
+	if s.Resources == nil {
+		return 0, false
+	}
+	q := s.Resources.Requests.Hugepages2Mi
+	if q.IsZero() {
+		q = s.Resources.Limits.Hugepages2Mi
+	}
+	if q.IsZero() {
+		return 0, false
+	}
+	return int(q.Value() / (1024 * 1024)), true
 }
 
 func (w *WekaContainer) IsDriversContainer() bool {
@@ -467,7 +687,7 @@ func (w *WekaContainer) IsDriversBuilder() bool {
 }
 
 func (w *WekaContainer) IsBackend() bool {
-	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeS3, WekaContainerModeNfs}, w.Spec.Mode)
+	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeS3, WekaContainerModeNfs, WekaContainerModeSmbw, WekaContainerModeDataServices}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) IsDiscoveryContainer() bool {
@@ -488,11 +708,21 @@ func (w *WekaContainer) HasPersistentStorage() bool {
 		WekaContainerModeDist,
 		WekaContainerModeDriversDist,
 		WekaContainerModeNfs,
+		WekaContainerModeSmbw,
+		WekaContainerModeSSDProxy,
+		WekaContainerModeTelemetry,
+		WekaContainerModeDataServices,
 	}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) HasFrontend() bool {
-	return slices.Contains([]string{WekaContainerModeS3, WekaContainerModeClient, WekaContainerModeNfs}, w.Spec.Mode)
+	if w.Spec.Mode == WekaContainerModeDataServices {
+		if w.Spec.DataServicesConfig != nil && w.Spec.DataServicesConfig.DataServicesFeCores > 0 {
+			return true
+		}
+		return false
+	}
+	return slices.Contains([]string{WekaContainerModeS3, WekaContainerModeClient, WekaContainerModeNfs, WekaContainerModeSmbw}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) IsS3Container() bool {
@@ -501,6 +731,10 @@ func (w *WekaContainer) IsS3Container() bool {
 
 func (w *WekaContainer) IsNfsContainer() bool {
 	return w.Spec.Mode == WekaContainerModeNfs
+}
+
+func (w *WekaContainer) IsDataServicesContainer() bool {
+	return w.Spec.Mode == WekaContainerModeDataServices
 }
 
 func (w *WekaContainer) HasJoinIps() bool {
@@ -526,15 +760,19 @@ func (w *WekaContainer) IsWekaContainer() bool {
 		WekaContainerModeDriversDist,
 		WekaContainerModeDriversBuilder,
 		WekaContainerModeNfs,
+		WekaContainerModeSmbw,
+		WekaContainerModeSSDProxy,
+		WekaContainerModeTelemetry,
+		WekaContainerModeDataServices,
 	}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) IsAllocatable() bool {
-	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeEnvoy, WekaContainerModeS3, WekaContainerModeNfs}, w.Spec.Mode)
+	return slices.Contains([]string{WekaContainerModeDrive, WekaContainerModeCompute, WekaContainerModeEnvoy, WekaContainerModeS3, WekaContainerModeNfs, WekaContainerModeSmbw, WekaContainerModeTelemetry, WekaContainerModeDataServices}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) MustHaveNodeAffinity() bool {
-	return w.IsAllocatable() && w.IsBackend() || w.IsEnvoy()
+	return w.IsAllocatable() && w.IsBackend() || w.IsEnvoy() || w.IsTelemetry()
 }
 
 func (w *WekaContainer) HasAgent() bool {
@@ -548,11 +786,11 @@ func (w *WekaContainer) HasAgent() bool {
 		WekaContainerModeDriversBuilder,
 		WekaContainerModeAdhocOpWC,
 		WekaContainerModeNfs,
+		WekaContainerModeSmbw,
+		WekaContainerModeSSDProxy,
+		WekaContainerModeTelemetry,
+		WekaContainerModeDataServices,
 	}, w.Spec.Mode)
-}
-
-func (w *WekaContainer) IsHostWideSingleton() bool {
-	return slices.Contains([]string{WekaContainerModeEnvoy, WekaContainerModeS3, WekaContainerModeNfs}, w.Spec.Mode)
 }
 
 func (w *WekaContainer) GetNodeAffinity() NodeName {
@@ -586,7 +824,27 @@ func (w *WekaContainer) IsClientContainer() bool {
 }
 
 func (w *WekaContainer) IsProtocolContainer() bool {
-	return slices.Contains([]string{WekaContainerModeNfs, WekaContainerModeS3}, w.Spec.Mode)
+	return slices.Contains([]string{WekaContainerModeNfs, WekaContainerModeS3, WekaContainerModeSmbw, WekaContainerModeDataServices}, w.Spec.Mode)
+}
+
+func (w *WekaContainer) IsSmbwContainer() bool {
+	return w.Spec.Mode == WekaContainerModeSmbw
+}
+
+func (w *WekaContainer) IsSSDProxyContainer() bool {
+	return w.Spec.Mode == WekaContainerModeSSDProxy
+}
+
+func (w *WekaContainer) UsesDriveSharing() bool {
+	return w.Spec.DriveCapacity > 0 || w.Spec.ContainerCapacity > 0
+}
+
+func (w *WekaContainer) HasContainerCapacity() bool {
+	return w.Spec.ContainerCapacity > 0
+}
+
+func (w *WekaContainer) TlcToQlcRatioEnabled() bool {
+	return w.Spec.DriveTypesRatio != nil && (w.Spec.DriveTypesRatio.Tlc > 0 || w.Spec.DriveTypesRatio.Qlc > 0)
 }
 
 func (w *WekaContainer) GetParentClusterId() string {
@@ -601,6 +859,10 @@ func (w *WekaContainer) GetParentClusterId() string {
 
 func (w *WekaContainer) IsEnvoy() bool {
 	return w.Spec.Mode == WekaContainerModeEnvoy
+}
+
+func (w *WekaContainer) IsTelemetry() bool {
+	return w.Spec.Mode == WekaContainerModeTelemetry
 }
 
 func (w *WekaContainer) GetPort() int {
