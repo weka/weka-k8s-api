@@ -199,6 +199,10 @@ type WekaClientSpec struct {
 
 	// Numa configures NUMA confinement for this client container
 	Numa *WekaNuma `json:"numa,omitempty"`
+
+	// UseNfs deploys this client's CSI installation - the CSIDriver, the controller, the node
+	// plugin - and creates no weka client containers, with CSI mounting over NFS.
+	UseNfs bool `json:"useNfs,omitempty"`
 }
 
 func (c *WekaClientSpec) GetCsiConfig() ClientCsiConfig {

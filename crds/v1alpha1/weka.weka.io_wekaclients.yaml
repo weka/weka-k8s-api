@@ -645,6 +645,11 @@ spec:
                     - all-at-once-force
                     type: string
                 type: object
+              useNfs:
+                description: |-
+                  UseNfs deploys this client's CSI installation - the CSIDriver, the controller, the node
+                  plugin - and creates no weka client containers, with CSI mounting over NFS.
+                type: boolean
               wekaHome:
                 properties:
                   cacertSecret:
